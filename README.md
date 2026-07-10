@@ -117,16 +117,38 @@ convention survive contact with a team.
 
 ## Quickstart
 
-`reflock` is a single dependency-free file (Python 3.8+). Vendor it or drop it on
-your `PATH`:
+`reflock` is a single dependency-free file (Python 3.8+) and is not scoped to any
+one project — install it once, use it from any repo.
+
+**Install onto `PATH`** (clones to `~/.local/share/reflock`, symlinks into
+`~/.local/bin`; re-run any time to update):
 
 ```bash
-curl -O https://…/reflock.py && chmod +x reflock.py
-./reflock.py check          # report problems (exit 1 if any)
-./reflock.py stamp          # fill empty pins
-./reflock.py stamp --rebless doc/DESIGN.md   # accept current target state for these refs
-./reflock.py suspects --all # bare path-shaped tokens that resolve to nothing
+curl -fsSL https://raw.githubusercontent.com/a-grasso/reflock/main/install.sh | bash
 ```
+
+Already have a clone (e.g. you're hacking on reflock itself)? Point at it instead
+of cloning a second copy — the installed command then *is* that checkout, no
+separate update step:
+
+```bash
+REFLOCK_SRC=~/Projects/reflock ./install.sh
+```
+
+Then, from any repo:
+
+```bash
+reflock check          # report problems (exit 1 if any)
+reflock stamp          # fill empty pins
+reflock stamp --rebless doc/DESIGN.md   # accept current target state for these refs
+reflock suspects --all # bare path-shaped tokens that resolve to nothing
+```
+
+There is deliberately no vendoring path. One machine, one installed copy, used
+by every repo — a per-repo checked-in copy is exactly the kind of duplicate
+source of truth reflock exists to keep A and B from silently disagreeing about.
+A hermetic CI image installs the same way (`install.sh`, or pin a commit via
+`REFLOCK_HOME`) rather than checking in a copy.
 
 It enumerates files with `git ls-files` (so `.gitignore` is honoured for free),
 always skips `.git` and `node_modules`, and treats a path git *would* ignore as
