@@ -1,0 +1,16 @@
+{
+  "//": "Merge into .claude/settings.json. Stop hooks take no matcher; the gate fires each time the agent tries to end its turn.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/reflock-gate.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
