@@ -1,0 +1,5 @@
+# Files skipped as SOURCES of references (they remain valid targets).
+# reflock documents and tests its own REF: syntax, so its source carries
+# example/fixture references that are not real.
+reflock.py
+test_reflock.py

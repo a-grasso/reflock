@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Git pre-commit hook — refuse commits that break cross-references.
+# Install:  ln -sf ../../examples/hooks/pre-commit .git/hooks/pre-commit
+#           chmod +x .git/hooks/pre-commit
+reflock_cmd="${REFLOCK:-reflock}"
+if ! $reflock_cmd check; then
+  echo "✗ reflock: fix broken cross-references before committing (or run: reflock stamp)." >&2
+  exit 1
+fi
