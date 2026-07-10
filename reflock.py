@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -322,7 +323,6 @@ def cmd_check(idx: Index, args) -> int:
             if verdict != "OK" or args.verbose:
                 results.append((verdict, ref, detail))
     if args.json:
-        import json
         print(json.dumps([{"verdict": v, "file": r.src, "line": r.line,
                            "target": r.target, "detail": d} for v, r, d in results], indent=2))
     else:
@@ -398,13 +398,15 @@ def cmd_suspects(idx: Index, args) -> int:
                 candidates.append((rel, i + 1, tok, [c for c in (rp, tok) if c]))
     # Pass 2: a path git would ignore is intentionally absent, not a stale ref.
     ignored = git_ignored(idx.root, sorted({c for *_, cs in candidates for c in cs}))
-    hits = 0
-    for rel, lineno, tok, cands in candidates:
-        if any(c in ignored for c in cands):
-            continue
-        print(f"  {rel}:{lineno}  {tok}   [bare path, does not resolve]")
-        hits += 1
-    print(f"\n{hits} suspect(s)." if hits else "\nNo bare-path suspects.")
+    hits = [(rel, lineno, tok) for rel, lineno, tok, cands in candidates
+            if not any(c in ignored for c in cands)]
+    if args.json:
+        print(json.dumps([{"file": rel, "line": lineno, "target": tok}
+                          for rel, lineno, tok in hits], indent=2))
+    else:
+        for rel, lineno, tok in hits:
+            print(f"  {rel}:{lineno}  {tok}   [bare path, does not resolve]")
+        print(f"\n{len(hits)} suspect(s)." if hits else "\nNo bare-path suspects.")
     return 1 if hits else 0
 
 
@@ -424,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("suspects", help="bare path-shaped tokens that don't resolve")
     sp.add_argument("paths", nargs="*")
     sp.add_argument("--all", action="store_true", help="scan every file, not just markdown")
+    sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_suspects)
     args = ap.parse_args(argv)
     root = repo_root(args.root)
