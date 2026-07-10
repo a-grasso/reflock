@@ -2,6 +2,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import shutil
 import sys
@@ -118,6 +119,15 @@ class ReflockTest(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             rc = reflock.main(["--root", self.d, "suspects"])
         self.assertEqual(rc, 0)
+
+    def test_suspects_json(self):
+        self.write("a.md", "The twin of platform/research.sh does the same.\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "suspects", "--json"])
+        self.assertEqual(rc, 1)
+        hits = json.loads(buf.getvalue())
+        self.assertEqual(hits, [{"file": "a.md", "line": 1, "target": "platform/research.sh"}])
 
 
 if __name__ == "__main__":
