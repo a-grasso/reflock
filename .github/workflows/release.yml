@@ -1,0 +1,86 @@
+name: release
+
+# Cut a release by pushing a tag:
+#
+#   git tag -a v0.1.1 -m v0.1.1 && git push origin v0.1.1
+#
+# This creates the GitHub release, then regenerates the Homebrew formula
+# (version + sha256 of the source tarball) and commits it to the tap.
+#
+# Requires a repo secret HOMEBREW_TAP_TOKEN: a PAT with contents:write on
+# a-grasso/homebrew-tap (the same tap portbook publishes to).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Compute source-tarball sha256
+        id: sha
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          # GitHub's generated source archive can lag a moment behind the release.
+          for i in $(seq 1 10); do
+            curl -fsSL "$url" -o src.tar.gz && break
+            echo "tarball not ready, retry $i"; sleep 3
+          done
+          echo "sha256=$(sha256sum src.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish formula to tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/a-grasso/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cat > tap/Formula/reflock.rb <<EOF
+          require "language/python"
+
+          class Reflock < Formula
+            desc "Lockfile for cross-references in a mixed docs and code tree"
+            homepage "https://github.com/a-grasso/reflock"
+            url "https://github.com/a-grasso/reflock/archive/refs/tags/v${VERSION}.tar.gz"
+            sha256 "${SHA256}"
+            license "MIT"
+
+            depends_on "python@3.13"
+
+            def install
+              bin.install "reflock.py" => "reflock"
+              rewrite_shebang detected_python_shebang, bin/"reflock"
+            end
+
+            test do
+              assert_match "usage: reflock", shell_output("#{bin}/reflock --help")
+            end
+          end
+          EOF
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/reflock.rb
+          git diff --cached --quiet && { echo "formula unchanged"; exit 0; }
+          git commit -m "reflock ${VERSION}"
+          git push
