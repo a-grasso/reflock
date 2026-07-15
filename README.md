@@ -120,8 +120,14 @@ convention survive contact with a team.
 `reflock` is a single dependency-free file (Python 3.8+) and is not scoped to any
 one project — install it once, use it from any repo.
 
-**Install onto `PATH`** (clones to `~/.local/share/reflock`, symlinks into
-`~/.local/bin`; re-run any time to update):
+**Homebrew** (macOS / Linuxbrew) — versioned, drops `reflock` onto `PATH`:
+
+```sh
+brew install a-grasso/tap/reflock
+```
+
+**Or install from source onto `PATH`** (clones to `~/.local/share/reflock`,
+symlinks into `~/.local/bin`; re-run any time to update):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/a-grasso/reflock/main/install.sh | bash
