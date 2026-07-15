@@ -126,6 +126,16 @@ one project — install it once, use it from any repo.
 brew install a-grasso/tap/reflock
 ```
 
+Managing Homebrew declaratively with [nix-homebrew](https://github.com/zhaofengli/nix-homebrew)?
+Add the tap and formula to your nix-darwin config instead of running `brew` by hand:
+
+```nix
+homebrew = {
+  taps  = [ "a-grasso/homebrew-tap" ];
+  brews = [ "a-grasso/tap/reflock" ];
+};
+```
+
 **Or install from source onto `PATH`** (clones to `~/.local/share/reflock`,
 symlinks into `~/.local/bin`; re-run any time to update):
 
