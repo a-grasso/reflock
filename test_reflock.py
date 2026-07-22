@@ -63,6 +63,24 @@ class ReflockTest(unittest.TestCase):
         self.write("a.md", "See [x](https://example.com/p.md).\n")
         self.assertEqual(self.verdict("a.md"), "OK")
 
+    def test_slugify_matches_github_double_hyphen(self):
+        # GitHub replaces each space independently and keeps consecutive
+        # hyphens; punctuation stripped between words leaves them behind.
+        cases = {
+            "Modules, imports & visibility": "modules-imports--visibility",
+            "Sum types & match": "sum-types--match",
+            "Operators & parenthesization": "operators--parenthesization",
+            "Memory-management model (GC / RC / borrow)":
+                "memory-management-model-gc--rc--borrow",
+        }
+        for heading, slug in cases.items():
+            self.assertEqual(reflock.slugify(heading), slug)
+
+    def test_anchor_with_stripped_punctuation(self):
+        self.write("t.md", "# H\n\n## Modules, imports & visibility\n\nbody\n")
+        self.write("a.md", "See [x](t.md#modules-imports--visibility).\n")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
     # --- fingerprint (Level 2) -------------------------------------------
     def test_reflow_invariant(self):
         self.write("t.md", "# H\n\n## Sec\n\nOne two three four.\n")
