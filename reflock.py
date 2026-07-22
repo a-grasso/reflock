@@ -161,7 +161,7 @@ def slugify(text: str) -> str:
     s = re.sub(r"[*_~]", "", s)                     # emphasis markers
     s = s.strip().lower()
     s = re.sub(r"[^\w\- ]", "", s, flags=re.UNICODE)
-    s = re.sub(r"\s+", "-", s)
+    s = s.replace(" ", "-")  # per-space, no collapse - GitHub keeps consecutive hyphens
     return s
 
 
