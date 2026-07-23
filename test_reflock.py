@@ -63,6 +63,13 @@ class ReflockTest(unittest.TestCase):
         self.write("a.md", "See [x](https://example.com/p.md).\n")
         self.assertEqual(self.verdict("a.md"), "OK")
 
+    def test_version_flag(self):
+        out = io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(out):
+            reflock.main(["--version"])
+        self.assertEqual(cm.exception.code, 0)
+        self.assertEqual(out.getvalue().strip(), f"reflock {reflock.__version__}")
+
     def test_slugify_matches_github_double_hyphen(self):
         # GitHub replaces each space independently and keeps consecutive
         # hyphens; punctuation stripped between words leaves them behind.
