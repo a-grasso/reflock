@@ -50,6 +50,8 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
+__version__ = "0.1.3"
+
 FP_LEN = 8  # hex chars of sha256; 32 bits — a missed drift is ~1 in 4e9
 
 # --- reference grammar -------------------------------------------------------
@@ -412,6 +414,7 @@ def cmd_suspects(idx: Index, args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="reflock", description="a lockfile for cross-references")
+    ap.add_argument("--version", action="version", version=f"reflock {__version__}")
     ap.add_argument("--root", default=".", help="tree root (default: git toplevel)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check", help="report reference problems")
