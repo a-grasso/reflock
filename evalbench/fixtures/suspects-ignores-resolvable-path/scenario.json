@@ -1,0 +1,13 @@
+{
+  "description": "A bare path mention that DOES resolve on disk is not a suspect.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

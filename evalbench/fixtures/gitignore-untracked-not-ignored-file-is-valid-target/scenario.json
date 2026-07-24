@@ -1,0 +1,18 @@
+{
+  "description": "An untracked-but-not-ignored file is still a valid target (git ls-files --others --exclude-standard).",
+  "git": {
+    "track": [
+      "a.md"
+    ]
+  },
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

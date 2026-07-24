@@ -1,0 +1,32 @@
+{
+  "description": "A pinned REF comment into a code `reflock-anchor` span drifts when the span's body changes.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    },
+    {
+      "write": {
+        "lib.py": "# reflock-anchor: run\ndef run():\n    return 99\n# reflock-anchor-end: run\n"
+      },
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": [
+        "DRIFTED (1)",
+        "lib.py#run",
+        "pinned @",
+        "now @"
+      ]
+    }
+  ]
+}

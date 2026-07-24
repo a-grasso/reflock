@@ -1,0 +1,29 @@
+{
+  "description": "Rewrapping/re-spacing a section's prose doesn't change its fingerprint.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    },
+    {
+      "write": {
+        "t.md": "# H\n\n## Sec\n\nOne two\nthree      four.\n"
+      },
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

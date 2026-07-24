@@ -1,0 +1,24 @@
+{
+  "description": "reflock still works in a plain (non-git) directory via the directory-walk fallback.",
+  "git": {
+    "skip": true
+  },
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "DANGLING",
+          "file": "a.md",
+          "line": 1,
+          "target": "missing.md",
+          "detail": "no such file: missing.md"
+        }
+      ]
+    }
+  ]
+}

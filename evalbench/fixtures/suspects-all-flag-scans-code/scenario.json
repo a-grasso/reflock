@@ -1,0 +1,28 @@
+{
+  "description": "Without --all, suspects only scans markdown; --all extends it to every file.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    },
+    {
+      "cmd": "suspects",
+      "args": [
+        "--all",
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "file": "lib.py",
+          "line": 1,
+          "target": "other/module.py"
+        }
+      ]
+    }
+  ]
+}

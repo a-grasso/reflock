@@ -1,4 +1,4 @@
-.PHONY: check stamp suspects test
+.PHONY: check stamp suspects test bench
 
 check:
 	python3 reflock.py check
@@ -11,3 +11,6 @@ suspects:
 
 test:
 	python3 -m unittest -v test_reflock
+
+bench:
+	python3 evalbench/run_bench.py

@@ -1,0 +1,22 @@
+{
+  "description": "A relative target that escapes the repo root is OK (out of scope), not DANGLING.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json",
+        "--verbose"
+      ],
+      "expect_exit": 0,
+      "expect_json": [
+        {
+          "verdict": "OK",
+          "file": "a.md",
+          "line": 1,
+          "target": "../outside.md",
+          "detail": "outside tree"
+        }
+      ]
+    }
+  ]
+}

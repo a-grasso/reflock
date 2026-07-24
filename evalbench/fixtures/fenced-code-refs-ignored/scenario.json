@@ -1,0 +1,22 @@
+{
+  "description": "References inside fenced code blocks are illustrative, not real - never parsed.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    },
+    {
+      "cmd": "suspects",
+      "args": [
+        "--all",
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
