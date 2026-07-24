@@ -7,13 +7,21 @@ import os
 import shutil
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 
 _spec = importlib.util.spec_from_file_location(
     "reflock", os.path.join(os.path.dirname(__file__), "reflock.py"))
 reflock = importlib.util.module_from_spec(_spec)
 sys.modules["reflock"] = reflock  # let dataclasses resolve annotations at import
 _spec.loader.exec_module(reflock)
+
+
+class _TTYBuffer(io.StringIO):
+    """A StringIO that claims to be a terminal, for exercising the color path."""
+    def isatty(self):
+        return True
 
 
 class ReflockTest(unittest.TestCase):
@@ -270,6 +278,61 @@ class ReflockTest(unittest.TestCase):
         rc, findings = self.check_json(os.path.join(self.d, "docs"))
         self.assertEqual(rc, 1)
         self.assertEqual([f["file"] for f in findings], ["docs/a.md"])
+
+    # --- colorized output ----------------------------------------------------
+    def test_check_colors_verdict_labels_on_a_tty(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf = _TTYBuffer()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "check"])
+        self.assertIn(reflock.VERDICT_COLOR["DANGLING"], buf.getvalue())
+        self.assertIn(reflock.COLOR_RESET, buf.getvalue())
+
+    def test_no_color_flag_disables_color_on_a_tty(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf = _TTYBuffer()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "check", "--no-color"])
+        self.assertNotIn("\033[", buf.getvalue())
+
+    def test_no_color_env_var_disables_color_on_a_tty(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf = _TTYBuffer()
+        with mock.patch.dict(os.environ, {"NO_COLOR": "1"}), \
+             contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "check"])
+        self.assertNotIn("\033[", buf.getvalue())
+
+    def test_non_tty_stdout_has_no_color_by_default(self):
+        # a plain io.StringIO().isatty() is False, so redirecting to a plain
+        # buffer (the normal test setup, and any non-tty destination like a
+        # file or pipe) never emits escape codes even without the flag/env var.
+        self.write("a.md", "See [x](missing.md).\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "check"])
+        self.assertNotIn("\033[", buf.getvalue())
+
+    def test_colorize_wraps_text_when_enabled(self):
+        colored = reflock.colorize("DANGLING (1)", "DANGLING", True)
+        self.assertIn("DANGLING (1)", colored)
+        self.assertTrue(colored.startswith(reflock.VERDICT_COLOR["DANGLING"]))
+        self.assertTrue(colored.endswith(reflock.COLOR_RESET))
+
+    def test_colorize_is_noop_when_disabled(self):
+        self.assertEqual(reflock.colorize("DANGLING (1)", "DANGLING", False), "DANGLING (1)")
+
+    def test_use_color_true_when_tty_and_no_overrides(self):
+        args = types.SimpleNamespace(no_color=False)
+        with contextlib.redirect_stdout(_TTYBuffer()), \
+             mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("NO_COLOR", None)
+            self.assertTrue(reflock.use_color(args))
+
+    def test_use_color_false_when_no_color_flag_set(self):
+        args = types.SimpleNamespace(no_color=True)
+        with contextlib.redirect_stdout(_TTYBuffer()):
+            self.assertFalse(reflock.use_color(args))
 
     # --- low-level helpers ---------------------------------------------------
     def test_resolve_path(self):

@@ -307,6 +307,29 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
 # --- commands ----------------------------------------------------------------
 BAD = {"DANGLING", "DRIFTED", "UNSTAMPED"}
 
+VERDICT_COLOR = {
+    "DANGLING": "\033[31m",   # red
+    "DRIFTED": "\033[33m",    # yellow
+    "UNSTAMPED": "\033[35m",  # magenta
+    "OK": "\033[32m",         # green
+}
+COLOR_RESET = "\033[0m"
+
+
+def use_color(args) -> bool:
+    """--no-color and NO_COLOR (https://no-color.org) both win over a tty; a
+    non-tty stdout (redirected to a file, piped into another tool) never gets
+    escape codes even if neither flag is set."""
+    if getattr(args, "no_color", False) or os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()
+
+
+def colorize(text: str, verdict: str, enabled: bool) -> str:
+    if not enabled:
+        return text
+    return f"{VERDICT_COLOR[verdict]}{text}{COLOR_RESET}"
+
 
 def scoped_files(idx: Index, paths: list[str]) -> list[str]:
     if not paths:
@@ -324,20 +347,21 @@ def cmd_check(idx: Index, args) -> int:
             verdict, detail = classify(idx, ref)
             if verdict != "OK" or args.verbose:
                 results.append((verdict, ref, detail))
+    problems = sum(1 for v, _, _ in results if v in BAD)
     if args.json:
         print(json.dumps([{"verdict": v, "file": r.src, "line": r.line,
                            "target": r.target, "detail": d} for v, r, d in results], indent=2))
-    else:
-        for v in ("DANGLING", "DRIFTED", "UNSTAMPED", "OK"):
-            group = [(r, d) for vv, r, d in results if vv == v]
-            if not group:
-                continue
-            print(f"\n{v} ({len(group)})")
-            for r, d in group:
-                print(f"  {r.src}:{r.line}  {r.target}   [{d}]")
-    problems = sum(1 for v, _, _ in results if v in BAD)
-    if not args.json:
-        print(f"\n{problems} problem(s)." if problems else "\nAll references OK.")
+        return 1 if problems else 0
+    color = use_color(args)
+    for v in ("DANGLING", "DRIFTED", "UNSTAMPED", "OK"):
+        group = [(r, d) for vv, r, d in results if vv == v]
+        if not group:
+            continue
+        print(f"\n{colorize(f'{v} ({len(group)})', v, color)}")
+        for r, d in group:
+            print(f"  {r.src}:{r.line}  {r.target}   [{d}]")
+    msg = f"{problems} problem(s)." if problems else "All references OK."
+    print(f"\n{colorize(msg, 'DANGLING' if problems else 'OK', color)}")
     return 1 if problems else 0
 
 
@@ -421,6 +445,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("paths", nargs="*")
     c.add_argument("--json", action="store_true")
     c.add_argument("--verbose", "-v", action="store_true", help="also list OK refs")
+    c.add_argument("--no-color", action="store_true", help="disable colored output")
     c.set_defaults(fn=cmd_check)
     s = sub.add_parser("stamp", help="fill / update fingerprints")
     s.add_argument("paths", nargs="*")

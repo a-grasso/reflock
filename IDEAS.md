@@ -53,10 +53,9 @@ priority tier.
    time, show the suggested new target or the drifted diff, prompt
    accept/skip/edit. A human-in-the-loop complement to the fully automatic
    `stamp --repoint` NORTHSTARS proposes.
-9. **Colorized terminal output.** Verdict labels colored by severity, respect
-   `NO_COLOR`/`--no-color`/non-tty auto-detection. Pure presentation, no
-   change to verdict computation, meaningful triage-speed win for the
-   default (non-JSON) path most humans actually run.
+9. ~~**Colorized terminal output.**~~ Implemented: `check`'s verdict labels
+   are colored by severity, honoring `NO_COLOR`, `--no-color`, and non-tty
+   auto-detection.
 10. **`reflock explain <file>:<line>`.** One command that prints everything
     about a single reference — resolved target, anchor, current vs. pinned
     fingerprint, the actual unit text on both sides — instead of making
