@@ -242,7 +242,6 @@ tightly enough to stay quiet.
 
 ## Not yet supported
 
-- Symbol-level anchors resolved by a real parser (today: markdown sections,
-  explicit `reflock-anchor` spans, or whole-file).
-- Reference-style markdown links (`[t][ref]`) and link-definition blocks.
-- A daemon / editor integration for check-on-save.
+See [NORTHSTARS.md](NORTHSTARS.md) for the full, prioritized list of
+capabilities reflock doesn't have yet, the real-world scenario forcing each
+one, and the rough shape of a fix.
