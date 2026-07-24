@@ -44,6 +44,12 @@ class ReflockTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             reflock.main(["--root", self.d, "stamp", *args])
 
+    def check_json(self, *args):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "check", "--json", *args])
+        return rc, json.loads(buf.getvalue())
+
     # --- structural (Level 1) --------------------------------------------
     def test_dangling_file(self):
         self.write("a.md", "See [x](missing.md).\n")
@@ -88,6 +94,53 @@ class ReflockTest(unittest.TestCase):
         self.write("a.md", "See [x](t.md#modules-imports--visibility).\n")
         self.assertEqual(self.verdict("a.md"), "OK")
 
+    def test_dir_target_ok(self):
+        self.write("assets/logo.png", "binary-ish\n")
+        self.write("a.md", "See [x](assets).\n")
+        verdict, detail = self.verdicts("a.md")[0]
+        self.assertEqual(verdict, "OK")
+        self.assertEqual(detail, "dir")
+
+    def test_outside_tree_ok(self):
+        self.write("a.md", "See [x](../outside.md).\n")
+        verdict, detail = self.verdicts("a.md")[0]
+        self.assertEqual(verdict, "OK")
+        self.assertEqual(detail, "outside tree")
+
+    def test_same_file_anchor_ok(self):
+        self.write("a.md", "# Title\n\n## Sec\n\nSee [self](#sec).\n")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
+    def test_duplicate_heading_slugs_disambiguated(self):
+        # GitHub suffixes repeats of the same slug with -1, -2, ...
+        self.write("t.md", "# Title\n\n## Sec\n\nfirst\n\n## Sec\n\nsecond\n")
+        self.write("a.md", "[a](t.md#sec)<!--@-->\n[b](t.md#sec-1)<!--@-->\n")
+        self.stamp()
+        verdicts = self.verdicts("a.md")
+        self.assertEqual([v for v, _ in verdicts], ["OK", "OK"])
+        # each pin must be scoped to its own section, not the other one's
+        self.write("t.md", "# Title\n\n## Sec\n\nfirst\n\n## Sec\n\nsecond CHANGED\n")
+        verdicts = self.verdicts("a.md")
+        self.assertEqual(verdicts[0][0], "OK")       # #sec (first) untouched
+        self.assertEqual(verdicts[1][0], "DRIFTED")  # #sec-1 (second) changed
+
+    def test_multiple_refs_per_line(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "See [ok](t.md#real) and [bad](missing.md) together.\n")
+        verdicts = self.verdicts("a.md")
+        self.assertEqual([v for v, _ in verdicts], ["OK", "DANGLING"])
+
+    def test_fenced_code_block_refs_not_parsed(self):
+        self.write("a.md", "Some text.\n\n```\nSee [x](missing.md) and # REF: also/missing.py\n```\n")
+        self.assertEqual(self.verdicts("a.md"), [])
+
+    def test_binary_target_treated_as_empty_unit(self):
+        with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
+            fh.write(b"\x00\x01binary")
+        self.write("a.md", "See [x](blob.bin).\n")
+        # exists, unreadable-as-text -> resolves as an empty unit, not DANGLING
+        self.assertEqual(self.verdict("a.md"), "OK")
+
     # --- fingerprint (Level 2) -------------------------------------------
     def test_reflow_invariant(self):
         self.write("t.md", "# H\n\n## Sec\n\nOne two three four.\n")
@@ -129,6 +182,29 @@ class ReflockTest(unittest.TestCase):
         self.write("lib.py", "# reflock-anchor: run\ndef run():\n    return 99\n# reflock-anchor-end: run\n")
         self.assertEqual(self.verdict("caller.py"), "DRIFTED")
 
+    def test_stamp_skips_dangling_ref(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        self.write("a.md", "Per [d](t.md#ghost)<!--@-->.\n")
+        self.stamp()
+        self.assertIn("<!--@-->", self.read("a.md"))  # left empty, not filled
+        self.assertEqual(self.verdict("a.md"), "DANGLING")
+
+    def test_stamp_leaves_existing_pin_without_rebless(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose Y instead.\n")
+        self.assertEqual(self.verdict("a.md"), "DRIFTED")
+        self.stamp()  # no --rebless
+        self.assertEqual(self.verdict("a.md"), "DRIFTED")  # unchanged, still drifted
+
+    def test_unpinned_code_ref_has_no_pin(self):
+        self.write("t.md", "# H\n\n## Sec\n\nbody\n")
+        self.write("caller.py", "# REF: t.md#sec\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "caller.py")
+        self.assertIsNone(refs[0].pin)
+        self.assertEqual(self.verdict("caller.py"), "OK")
+
     # --- suspects --------------------------------------------------------
     def test_suspects_catches_bare_path(self):
         self.write("a.md", "The twin of platform/research.sh does the same.\n")
@@ -153,6 +229,57 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(rc, 1)
         hits = json.loads(buf.getvalue())
         self.assertEqual(hits, [{"file": "a.md", "line": 1, "target": "platform/research.sh"}])
+
+    def test_suspects_all_flag_scans_code_files(self):
+        self.write("lib.py", "# see other/module.py for details\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "suspects", "--json"])
+        self.assertEqual(rc, 0)  # markdown-only by default: nothing scanned
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "suspects", "--all", "--json"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(json.loads(buf.getvalue()),
+                          [{"file": "lib.py", "line": 1, "target": "other/module.py"}])
+
+    # --- ignore semantics --------------------------------------------------
+    def test_reflockignore_skips_source_but_not_target(self):
+        self.write(".reflockignore", "vendor/*.md\n")
+        self.write("vendor/thirdparty.md", "See [x](missing.md).\n")  # would DANGLE if scanned
+        self.write("a.md", "See [external](vendor/thirdparty.md) for details.\n")
+        rc, findings = self.check_json()
+        self.assertEqual(rc, 0)
+        self.assertEqual(findings, [])
+
+    # --- CLI / scoping -------------------------------------------------------
+    def test_check_verbose_includes_ok(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        self.write("a.md", "Good [x](t.md#real). Bad [y](missing.md).\n")
+        rc, findings = self.check_json()
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(findings), 1)  # OK hidden by default
+        rc, findings = self.check_json("--verbose")
+        self.assertEqual(rc, 1)
+        self.assertEqual([f["verdict"] for f in findings], ["OK", "DANGLING"])
+
+    def test_scoped_check_limits_to_path_arg(self):
+        # path args are resolved relative to the process CWD (like git/find), not --root
+        self.write("docs/a.md", "See [x](missing.md).\n")
+        self.write("other/b.md", "See [y](missing2.md).\n")
+        rc, findings = self.check_json(os.path.join(self.d, "docs"))
+        self.assertEqual(rc, 1)
+        self.assertEqual([f["file"] for f in findings], ["docs/a.md"])
+
+    # --- low-level helpers ---------------------------------------------------
+    def test_resolve_path(self):
+        self.assertEqual(reflock.resolve_path("docs/a.md", "b.md"), "docs/b.md")
+        self.assertEqual(reflock.resolve_path("a.md", "sub/b.md"), "sub/b.md")
+        self.assertIsNone(reflock.resolve_path("a.md", "../outside.md"))
+
+    def test_normalize_strips_pin_and_collapses_whitespace(self):
+        self.assertEqual(reflock.normalize("one   two\nthree"), b"one two three")
+        self.assertEqual(reflock.normalize("text<!--@a1b2c3d4-->more"), b"textmore")
 
 
 if __name__ == "__main__":
