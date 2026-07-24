@@ -224,6 +224,10 @@ touching nothing else.
   `reflock-anchor` on hot sections if the churn annoys you.
 - **Fingerprints are whitespace- and reflow-invariant.** Rewrapping a paragraph
   won't flag it; changing a word will.
+- **Path arguments (`check`/`stamp`/`suspects [paths...]`) are resolved relative
+  to the current working directory**, not `--root` - same convention as `git`,
+  `find`, etc. Run from the repo root (or pass absolute paths) if you're
+  scripting against a `--root` that differs from your CWD.
 
 ## Prior art
 
