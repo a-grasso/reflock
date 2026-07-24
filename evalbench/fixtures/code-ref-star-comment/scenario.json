@@ -1,0 +1,22 @@
+{
+  "description": "A REF comment using `*` (block-comment continuation) opener resolves like any other reference.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json",
+        "--verbose"
+      ],
+      "expect_exit": 0,
+      "expect_json": [
+        {
+          "verdict": "OK",
+          "file": "caller.txt",
+          "line": 1,
+          "target": "target.md#sec",
+          "detail": "unpinned"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "description": "A URL-scheme target is never resolved locally; always OK.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json",
+        "--verbose"
+      ],
+      "expect_exit": 0,
+      "expect_json": [
+        {
+          "verdict": "OK",
+          "file": "a.md",
+          "line": 1,
+          "target": "https://example.com/p.md",
+          "detail": "external"
+        }
+      ]
+    }
+  ]
+}

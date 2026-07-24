@@ -1,0 +1,19 @@
+{
+  "description": "A bare mention of a path git would ignore is intentionally absent, not a stale ref.",
+  "git": {
+    "track": [
+      ".gitignore",
+      "a.md"
+    ]
+  },
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

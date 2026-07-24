@@ -1,0 +1,13 @@
+{
+  "description": "An unpinned link that resolves is OK, and OK findings are invisible by default.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

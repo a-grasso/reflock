@@ -1,0 +1,13 @@
+{
+  "description": "A same-page `#anchor` link resolves against its own file.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
