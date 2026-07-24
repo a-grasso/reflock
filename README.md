@@ -244,4 +244,5 @@ tightly enough to stay quiet.
 
 See [NORTHSTARS.md](NORTHSTARS.md) for the full, prioritized list of
 capabilities reflock doesn't have yet, the real-world scenario forcing each
-one, and the rough shape of a fix.
+one, and the rough shape of a fix. [IDEAS.md](IDEAS.md) is the wider, less
+prioritized brainstorm those northstars are drawn from.
