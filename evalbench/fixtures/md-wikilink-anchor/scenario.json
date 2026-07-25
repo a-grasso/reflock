@@ -1,0 +1,11 @@
+{
+  "description": "An anchor after # in a wiki-link resolves.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "description": "A pinned basename-resolved wiki-link goes DANGLING once a second same-basename file is added - a true finding, not noise.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    },
+    {
+      "write": {
+        "spec/loader.md": "# Loader\n"
+      },
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"verdict": "DANGLING", "file": "a.md", "line": 1, "target": "loader", "detail": "ambiguous: docs/loader.md, spec/loader.md"}
+      ]
+    }
+  ]
+}

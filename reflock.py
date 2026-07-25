@@ -76,6 +76,12 @@ REF_DEF = re.compile(
     r'^\s*\[[^\]]+\]:\s+(?P<target>\S+?)(?:\s+"[^"]*")?'
     r"(?:\s*<!--@(?P<pin>[0-9a-f]*)-->)?\s*$"
 )
+# A wiki-link: [[target]], [[target#anchor]], [[target|alias]], or both.
+# Alias is display text and split off at the first `|` only.
+WIKI_LINK = re.compile(
+    r"\[\[(?P<target>[^\]|]+?)(?:\|[^\]]*)?\]\]"
+    r"(?:[\s.,;:!?]*<!--@(?P<pin>[0-9a-f]*)-->)?"
+)
 ANCHOR_OPEN = re.compile(r"reflock-anchor:\s*(?P<name>[\w.\-/]+)")
 ANCHOR_END = re.compile(r"reflock-anchor-end:\s*(?P<name>[\w.\-/]+)")
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*\s*$")
@@ -95,6 +101,7 @@ class Ref:
     target: str       # raw target string
     pin: str | None   # None=unpinned, ''=opted-in-unstamped, hex=pinned
     pin_span: tuple[int, int] | None  # (start,end) of hex within the source line
+    wiki: bool = False  # True for [[wiki-link]] targets - enables basename fallback (D4)
 
 
 @dataclass
@@ -281,13 +288,14 @@ def parse_refs(idx: Index, rel: str) -> list[Ref]:
         # Inline code spans are exempt on the same basis as fenced blocks;
         # masking (not stripping) keeps every other match's column correct.
         scan = mask_code_spans(ln) if is_md else ln
-        patterns = [(MD_REF, "md"), (REF_DEF, "md")] if is_md else []
+        patterns = [(MD_REF, "md"), (REF_DEF, "md"), (WIKI_LINK, "md")] if is_md else []
         patterns.append((CODE_REF, "code"))
         for pat, kind in patterns:
             for m in pat.finditer(scan):
                 pin = m.group("pin")
                 span = m.span("pin") if pin is not None else None
-                refs.append(Ref(rel, i + 1, kind, m.group("target"), pin, span))
+                refs.append(Ref(rel, i + 1, kind, m.group("target"), pin, span,
+                                 wiki=(pat is WIKI_LINK)))
     return refs
 
 
@@ -296,6 +304,25 @@ def resolve_path(src: str, target: str) -> str | None:
     base = os.path.dirname(src)
     p = os.path.normpath(os.path.join(base, target)).replace(os.sep, "/")
     return None if p.startswith("..") else p
+
+
+def resolve_wikilink(idx: Index, src: str, path_part: str) -> tuple[str | None, str | None]:
+    """Relative-first, then unique-basename resolution for wiki-links (D4).
+
+    Returns (path, detail); detail is set only when path is None, for the
+    DANGLING message (plain no-match vs. ambiguous basename).
+    """
+    candidate = path_part if os.path.splitext(path_part)[1] else path_part + ".md"
+    rel = resolve_path(src, candidate)
+    if rel is not None and rel in idx.files:
+        return rel, None
+    base = os.path.basename(candidate)
+    matches = sorted(f for f in idx.files if os.path.basename(f) == base)
+    if len(matches) == 1:
+        return matches[0], None
+    if len(matches) > 1:
+        return None, f"ambiguous: {', '.join(matches)}"
+    return None, f"no such file: {path_part}"
 
 
 def unit_text(idx: Index, path: str, anchor: str | None) -> str | list | None:
@@ -328,14 +355,19 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
         path, anchor = ref.src, tgt[1:]
     else:
         path_part, _, anchor = tgt.partition("#")
-        path = resolve_path(ref.src, path_part)
         anchor = anchor or None
-        if path is None:
-            return "OK", "outside tree"
-        if path not in idx.files:
-            if path.rstrip("/") in idx.dirs:
-                return "OK", "dir"
-            return "DANGLING", f"no such file: {path}"
+        if ref.wiki:
+            path, detail = resolve_wikilink(idx, ref.src, path_part)
+            if path is None:
+                return "DANGLING", detail
+        else:
+            path = resolve_path(ref.src, path_part)
+            if path is None:
+                return "OK", "outside tree"
+            if path not in idx.files:
+                if path.rstrip("/") in idx.dirs:
+                    return "OK", "dir"
+                return "DANGLING", f"no such file: {path}"
     unit = unit_text(idx, path, anchor)
     if unit is None:
         return "DANGLING", f"no anchor '#{anchor}' in {path}"
@@ -461,7 +493,12 @@ def plan_stamp(idx: Index, args):
             if verdict == "DANGLING":
                 continue
             path_part, _, anchor = ref.target.partition("#")
-            path = ref.src if ref.target.startswith("#") else resolve_path(ref.src, path_part)
+            if ref.target.startswith("#"):
+                path = ref.src
+            elif ref.wiki:
+                path, _ = resolve_wikilink(idx, ref.src, path_part)
+            else:
+                path = resolve_path(ref.src, path_part)
             unit = unit_text(idx, path, (ref.target[1:] if ref.target.startswith("#") else anchor) or None)
             fp = fingerprint(unit)
             if fp != ref.pin:

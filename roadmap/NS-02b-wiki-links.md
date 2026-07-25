@@ -1,6 +1,7 @@
 # NS-02b acceptance contract: wiki-links
 
-Source: [northstar #2](../NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near)
+Source: northstar #2, markdown link forms beyond `[text](target)` (now resolved
+and removed from [NORTHSTARS.md](../NORTHSTARS.md) - see [NS-02a](NS-02a-reference-style-links.md))
 Owner: agent · Tier: near · Touches: [reflock.py](../reflock.py)
 Locked decisions: [D4](DECIDED.md#d4-wiki-link-resolution-relative-first-then-unique-basename), [D2](DECIDED.md#d2-inline-code-spans-are-not-references), [D3](DECIDED.md#d3-zero-runtime-dependencies)
 

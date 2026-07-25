@@ -1,0 +1,11 @@
+{
+  "description": "An explicit .md extension in a wiki-link target works, no double-suffixing.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

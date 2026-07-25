@@ -1,0 +1,13 @@
+{
+  "description": "Two same-basename files give DANGLING, both candidates listed in the detail, sorted.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"verdict": "DANGLING", "file": "a.md", "line": 1, "target": "loader", "detail": "ambiguous: docs/loader.md, spec/loader.md"}
+      ]
+    }
+  ]
+}

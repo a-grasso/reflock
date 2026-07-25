@@ -1,0 +1,11 @@
+{
+  "description": "A wiki-link inside a fenced code block is not parsed as a reference.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

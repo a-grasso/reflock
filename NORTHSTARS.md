@@ -62,30 +62,6 @@ actually occurs.
 
 ---
 
-## 2. Markdown link forms beyond `[text](target)` *(Near)*
-
-**The scenario:** **Wiki-links** - `[[loader]]` or
-`[[0013-prompts-as-resources#loader|the loader]]`, the Obsidian/Foam/Logseq
-convention - show up constantly in real docs and aren't seen at all today.
-reflock's own README already cites Obsidian backlinks as prior art; teams that
-keep engineering notes in an Obsidian vault next to (or inside) a code repo
-will write these by reflex.
-
-Reference-style links (`[the loader][loader-ref]` with a
-`[loader-ref]: doc/adr/0013.md#loader` definition elsewhere in the file) are
-handled - see [NS-02a](roadmap/NS-02a-reference-style-links.md).
-
-**Why reflock can't do this today:** a wiki-link isn't parsed at all - not
-`DANGLING`, not anything. It's invisible, the same failure mode as #1: looks
-clean, isn't checked.
-
-**Shape of a solution:** a wiki-link pattern with `#anchor` and `|alias`
-handled the same way `[text](target)` already is, plugging into the existing
-`Ref`/`classify` pipeline unchanged - this is grammar surface area, not a
-design change. Locked in [DECIDED.md D4](roadmap/DECIDED.md#d4-wiki-link-resolution-relative-first-then-unique-basename).
-
----
-
 ## 4. CI-native output: inline annotations, not just a log block *(Near)*
 
 **The scenario:** a reviewer wants a `DANGLING` or `DRIFTED` finding to show
