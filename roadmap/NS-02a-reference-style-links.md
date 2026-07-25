@@ -84,8 +84,12 @@ Direct `parse_refs` assertions:
 ## Verification
 
 ```
-make test && make bench && make check && make suspects
+make gate
 ```
+
+`suspects` is advisory and exits nonzero whenever it has
+anything to say, so it is not part of the gate. Read its output, act on
+anything real, but do not chain it.
 
 `make check` will newly see any reference-style links in this repo's own docs.
 New findings are an expected outcome, not a regression. Resolve them by fixing

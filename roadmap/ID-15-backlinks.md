@@ -67,8 +67,12 @@ NORTHSTARS.md:18    DECISIONS.md                                                
 ## Verification
 
 ```
-make test && make bench && make check && make suspects
+make gate
 ```
+
+`suspects` is advisory and exits nonzero whenever it has
+anything to say, so it is not part of the gate. Read its output, act on
+anything real, but do not chain it.
 
 Then run it against this repo for real and put the output in the PR body -
 DECISIONS.md and NORTHSTARS.md are genuinely cross-referenced, so it is a live

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Gate for autonomous (and human) commits: nothing lands on a red tree.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#
+# `make gate` is test + bench + check. `suspects` is excluded deliberately: it
+# is an advisory heuristic that exits nonzero whenever it has anything to say.
+#
+# This exists because an autonomous loop commits when the *agent* reports
+# success, which is not the same as the gates being green. Enforce it here so a
+# self-reported success on a broken tree is rejected and repaired rather than
+# landed.
+set -e
+
+if ! make gate; then
+	echo >&2
+	echo "pre-commit: make gate failed - commit rejected." >&2
+	echo "pre-commit: fix the cause. Do not bypass with --no-verify." >&2
+	exit 1
+fi

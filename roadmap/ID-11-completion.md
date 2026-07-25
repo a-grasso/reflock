@@ -78,8 +78,12 @@ fixture repo adds nothing. State that in the PR rather than adding an empty one.
 ## Verification
 
 ```
-make test && make bench && make check && make suspects
+make gate
 ```
+
+`suspects` is advisory and exits nonzero whenever it has
+anything to say, so it is not part of the gate. Read its output, act on
+anything real, but do not chain it.
 
 Plus a manual check in at least one real shell, reported in the PR body. A
 completion script that is syntactically valid and functionally useless passes

@@ -1,4 +1,4 @@
-.PHONY: check stamp suspects test bench
+.PHONY: check stamp suspects test bench gate
 
 check:
 	python3 reflock.py check
@@ -14,3 +14,8 @@ test:
 
 bench:
 	python3 evalbench/run_bench.py
+
+# The authoritative gate: everything that must be green to commit.
+# `suspects` is deliberately excluded - it is an advisory heuristic and exits
+# nonzero whenever it has anything to say, which is most of the time.
+gate: test bench check
