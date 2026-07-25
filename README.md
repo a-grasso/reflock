@@ -160,6 +160,10 @@ reflock stamp --rebless doc/DESIGN.md   # accept current target state for these 
 reflock suspects --all # bare path-shaped tokens that resolve to nothing
 ```
 
+`check` colors verdict labels by severity when stdout is a terminal; pass
+`--no-color` or set `NO_COLOR` (https://no-color.org) to turn that off, or pipe
+output anywhere and it's plain text automatically.
+
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
 source of truth reflock exists to keep A and B from silently disagreeing about.
@@ -244,4 +248,5 @@ tightly enough to stay quiet.
 
 See [NORTHSTARS.md](NORTHSTARS.md) for the full, prioritized list of
 capabilities reflock doesn't have yet, the real-world scenario forcing each
-one, and the rough shape of a fix.
+one, and the rough shape of a fix. [IDEAS.md](IDEAS.md) is the wider, less
+prioritized brainstorm those northstars are drawn from.
