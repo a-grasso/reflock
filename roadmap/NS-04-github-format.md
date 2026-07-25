@@ -61,8 +61,12 @@ touching callers, the layer is wrong - report that rather than working around it
 ## Verification
 
 ```
-make test && make bench && make check && make suspects
+make gate
 ```
+
+`suspects` is advisory and exits nonzero whenever it has
+anything to say, so it is not part of the gate. Read its output, act on
+anything real, but do not chain it.
 
 Additionally: paste one emitted line into a scratch workflow run, or cite
 GitHub's workflow-command documentation for each escape, in the PR body. An
