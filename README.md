@@ -96,6 +96,24 @@ same way. The shortcut form - a lone `[loader-ref]` with no second bracket
 pair - is **not** supported: it is indistinguishable from ordinary bracketed
 prose.
 
+Wiki-links are understood too - `[[loader]]`, `[[loader#anchor]]`,
+`[[loader|display text]]`:
+
+```markdown
+See [[loader]] and [[0013-prompts-as-resources#loader|the loader]].
+```
+
+An alias after `|` is display text only; a target containing a `|` splits at
+the **first** one. Resolution tries two things, in order: first as a path
+relative to the referring file (`.md` appended when the target has no
+extension), then - if that fails - by unique basename across the whole tree.
+The second step is what makes `[[loader]]` work from anywhere in an Obsidian-
+style vault without a relative path, matching how Obsidian resolves note
+names. If more than one file shares that basename, the link is `DANGLING`
+with every candidate listed, not silently resolved to one of them - **this is
+not full Obsidian fidelity**: there is no alias-index, no folder-priority
+config, and no fuzzy matching, just relative-then-unique-basename.
+
 ### Level 2 — pin load-bearing references with a fingerprint
 
 Where B makes a *claim* about A's content (not just "see also"), pin it. Two

@@ -1,0 +1,11 @@
+{
+  "description": "Only the first | splits the target from the alias, even if the alias itself contains a pipe.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "A wiki-link resolving to a sibling .md file, .md implied, is OK.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

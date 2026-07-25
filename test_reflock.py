@@ -277,6 +277,103 @@ class ReflockTest(unittest.TestCase):
         self.assertIn("The tokenizer feeds [the loader][loader-ref] directly.\n", content)
         self.assertRegex(content, r"\[loader-ref\]: t\.md#real<!--@[0-9a-f]{8}-->")
 
+    # --- wiki-links (NS-02b) ----------------------------------------------
+    def test_wikilink_bare_target(self):
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader]] here.\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "loader")
+        self.assertEqual(refs[0].kind, "md")
+
+    def test_wikilink_anchor_only(self):
+        self.write("a.md", "# T\n\n## Sec\n\nSee [[#sec]] here.\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(refs[0].target, "#sec")
+
+    def test_wikilink_anchor(self):
+        self.write("loader.md", "# T\n\n## Sec\n\nbody\n")
+        self.write("a.md", "See [[loader#sec]] here.\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(refs[0].target, "loader#sec")
+
+    def test_wikilink_alias(self):
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader|the loader]] here.\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "loader")
+
+    def test_wikilink_anchor_and_alias(self):
+        self.write("loader.md", "# T\n\n## Sec\n\nbody\n")
+        self.write("a.md", "See [[loader#sec|the loader]] here.\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(refs[0].target, "loader#sec")
+
+    def test_wikilink_alias_contains_pipe(self):
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader|a|b]] here.\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "loader")
+
+    def test_wikilink_existing_pin(self):
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader]]<!--@abcd1234--> here.\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].pin, "abcd1234")
+        s, e = refs[0].pin_span
+        line = reflock.build_index(self.d).lines["a.md"][0]
+        self.assertEqual(line[s:e], "abcd1234")
+
+    def test_wikilink_fence_skipped(self):
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "```\nSee [[loader]] here.\n```\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(refs, [])
+
+    def test_wikilink_resolves_relative_first(self):
+        self.write("sub/loader.md", "# Loader\n")
+        self.write("sub/a.md", "See [[loader]] here.\n")
+        self.assertEqual(self.verdict("sub/a.md"), "OK")
+
+    def test_wikilink_explicit_extension_no_double_suffix(self):
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader.md]] here.\n")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
+    def test_wikilink_basename_fallback(self):
+        self.write("docs/loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader]] here.\n")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
+    def test_wikilink_basename_ambiguous(self):
+        self.write("docs/loader.md", "# Loader\n")
+        self.write("spec/loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader]] here.\n")
+        verdict, detail = self.verdicts("a.md")[0]
+        self.assertEqual(verdict, "DANGLING")
+        self.assertEqual(detail, "ambiguous: docs/loader.md, spec/loader.md")
+
+    def test_wikilink_dangling_no_relative_no_basename(self):
+        self.write("a.md", "See [[nowhere]] here.\n")
+        self.assertEqual(self.verdict("a.md"), "DANGLING")
+
+    def test_wikilink_stamp_roundtrip_via_basename(self):
+        self.write("docs/loader.md", "# Loader\n\nbody\n")
+        self.write("a.md", "See [[loader]]<!--@-->.\n")
+        self.stamp()
+        self.assertEqual(self.verdict("a.md"), "OK")
+        self.write("docs/loader.md", "# Loader\n\nbody CHANGED\n")
+        self.assertEqual(self.verdict("a.md"), "DRIFTED")
+
+    def test_wikilink_relative_and_inline_agree(self):
+        self.write("sub/loader.md", "# Loader\n")
+        self.write("sub/a.md", "[[loader]]\n")
+        self.write("sub/b.md", "[loader](loader.md)\n")
+        self.assertEqual(self.verdict("sub/a.md"), self.verdict("sub/b.md"))
+
     def test_binary_target_treated_as_empty_unit(self):
         with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
             fh.write(b"\x00\x01binary")

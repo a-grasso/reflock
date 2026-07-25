@@ -1,11 +1,12 @@
 # NS-02a acceptance contract: reference-style markdown links
 
-Source: [northstar #2](../NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near)
+Source: northstar #2, markdown link forms beyond `[text](target)` (now resolved
+and removed from [NORTHSTARS.md](../NORTHSTARS.md) - see [NS-02b](NS-02b-wiki-links.md))
 Owner: agent · Tier: near · Touches: [reflock.py](../reflock.py)
 Locked decisions: [D2](DECIDED.md#d2-inline-code-spans-are-not-references), [D3](DECIDED.md#d3-zero-runtime-dependencies)
 
-Northstar #2 covers two link forms. It is split because only one of them had an
-open question: this half has none. Wiki-links are NS-02b.
+Northstar #2 covered two link forms. It was split because only one of them had
+an open question: this half has none. Wiki-links are NS-02b.
 
 ## Required behavior
 

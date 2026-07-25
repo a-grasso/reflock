@@ -1,0 +1,13 @@
+{
+  "description": "No relative match and no basename match is DANGLING.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"verdict": "DANGLING", "file": "a.md", "line": 1, "target": "nowhere", "detail": "no such file: nowhere"}
+      ]
+    }
+  ]
+}

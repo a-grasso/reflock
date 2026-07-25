@@ -62,7 +62,7 @@ items:
 
   - id: NS-02a
     title: Reference-style markdown links
-    source: NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near
+    source: roadmap/NS-02a-reference-style-links.md
     tier: near
     owner: agent
     status: done
@@ -86,10 +86,10 @@ items:
 
   - id: NS-02b
     title: Wiki-links
-    source: NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near
+    source: roadmap/NS-02b-wiki-links.md
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/NS-02b-wiki-links.md
     blocked_by: [NS-02a]
     touches: [reflock.py]
