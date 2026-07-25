@@ -183,6 +183,33 @@ items:
       what "no additional dependencies" means for pre-commit's own venv
       bootstrapping.
 
+  - id: BENCH-01
+    title: evalbench cannot assert stderr or cross-step byte identity
+    source: agent-reported (grind iterations 3, 5, 7, 8)
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+    touches: [evalbench/run_bench.py, evalbench/README.md]
+    note: >-
+      run_bench.py's step schema exposes only expect_json, expect_contains and
+      expect_not_contains, all of which inspect stdout. Two capabilities the
+      contracts keep asking for are therefore unavailable: asserting stderr
+      content or emptiness, and asserting that two steps produced
+      byte-identical stdout. Four shipped items worked around the gap rather
+      than closing it - FMT-01 approximated "identical stdout and exit code
+      with and without --format human" using matching expect_contains
+      snippets; NS-03 approximated "writes nothing" with pin-marker regexes
+      instead of comparing file bytes/mtime across steps; ID-13's contract
+      asks for a summary line "only on stderr" and could only assert that
+      stdout does NOT contain it; NS-04's github-format annotations have the
+      same stream-destination problem. Every one of those assertions is
+      weaker than the contract it claims to satisfy, and a regression that
+      moved output between streams would pass the bench today. Needs a
+      contract specifying the new step primitives (at minimum expect_stderr
+      /expect_stderr_empty and a same-as-step-N stdout comparison), then a
+      follow-up pass to tighten the four approximated fixtures.
+
   # --- done ------------------------------------------------------------------
   - id: BUG-01
     title: slugify treats link syntax inside a heading code span as a link
