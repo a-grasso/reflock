@@ -63,8 +63,12 @@ dependency.
 ## Verification
 
 ```
-make test && make bench && make check && make suspects
+make gate
 ```
+
+`suspects` is advisory and exits nonzero whenever it has
+anything to say, so it is not part of the gate. Read its output, act on
+anything real, but do not chain it.
 
 Plus an actual `pre-commit try-repo .` run against this repo, with output in the
 PR body. A manifest that parses but does not run is the whole risk of this item,
