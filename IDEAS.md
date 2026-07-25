@@ -80,11 +80,6 @@ than by priority tier.
     similarity score (e.g. token-level diff ratio) surfaced in `--verbose`
     output would help a reviewer triage a long `DRIFTED` list by how much
     actually changed.
-15. **`reflock backlinks <path>`.** "What points at this file" is the
-    Obsidian instinct the README already names as prior art, but it's never
-    surfaced as its own command — today you'd have to grep the whole index
-    yourself. Directly useful before editing a heavily-cited file: "what
-    would I invalidate?"
 16. **Detect verbatim-pasted excerpts, not just links.** The README's own
     caveat says "prefer eliminating the reference — if B can transclude
     A, there's nothing to keep in sync." A checker that flags an

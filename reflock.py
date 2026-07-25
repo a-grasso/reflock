@@ -542,6 +542,60 @@ def cmd_stamp(idx: Index, args) -> int:
     return 0
 
 
+def render_backlinks_human(rows, target: str, args) -> int:
+    if not rows:
+        print(f"No backlinks to {target}.")
+        return 0
+    for rel, line, tgt, pin in rows:
+        print(f"{rel}:{line}  {tgt}  {pin}")
+    return 0
+
+
+def render_backlinks_json(rows, target: str, args) -> int:
+    print(json.dumps([{"file": rel, "line": line, "target": tgt, "pin": pin}
+                      for rel, line, tgt, pin in rows], indent=2))
+    return 0
+
+
+BACKLINKS_RENDERERS = {"human": render_backlinks_human, "json": render_backlinks_json}
+
+
+def cmd_backlinks(idx: Index, args) -> int:
+    try:
+        fmt = resolve_format(args)
+    except FormatConflict as e:
+        print(e, file=sys.stderr)
+        return 2
+    target_path, _, target_anchor = args.path.partition("#")
+    target_anchor = target_anchor or None
+    if target_path not in idx.files:
+        print(f"error: no such file in index: {target_path}", file=sys.stderr)
+        return 2
+    rows = []
+    for rel in scoped_files(idx, []):
+        for ref in parse_refs(idx, rel):
+            tgt = ref.target
+            if EXTERNAL.match(tgt) and not tgt.startswith("#"):
+                continue
+            if tgt.startswith("#"):
+                path, anchor = ref.src, tgt[1:]
+            else:
+                path_part, _, anchor = tgt.partition("#")
+                anchor = anchor or None
+                if ref.wiki:
+                    path, _ = resolve_wikilink(idx, ref.src, path_part)
+                else:
+                    path = resolve_path(ref.src, path_part)
+            if path != target_path:
+                continue
+            if target_anchor is not None and anchor != target_anchor:
+                continue
+            pin = "unpinned" if ref.pin is None else ("unstamped" if ref.pin == "" else "pinned")
+            rows.append((ref.src, ref.line, ref.target, pin))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return BACKLINKS_RENDERERS[fmt](rows, target_path, args)
+
+
 def cmd_suspects(idx: Index, args) -> int:
     # Pass 1: collect path-shaped tokens that resolve to nothing.
     candidates = []  # (rel, lineno, token, [paths to test against .gitignore])
@@ -609,6 +663,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--all", action="store_true", help="scan every file, not just markdown")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_suspects)
+    bl = sub.add_parser("backlinks", help="list references pointing at a path")
+    bl.add_argument("path", help="repo-relative path, optionally with #anchor")
+    bl.add_argument("--format", choices=sorted(BACKLINKS_RENDERERS), default=None,
+                    help="output format (default: human)")
+    bl.set_defaults(fn=cmd_backlinks)
     comp = sub.add_parser("completion", help="print a shell completion script")
     comp.add_argument("shell", choices=COMPLETION_SHELLS)
     comp.set_defaults(fn=cmd_completion, needs_index=False)

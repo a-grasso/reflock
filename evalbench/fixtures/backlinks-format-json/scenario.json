@@ -1,0 +1,13 @@
+{
+  "description": "--format json output shape is stable: file, line, target, pin",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md", "--format", "json"],
+      "expect_json": [
+        {"file": "a.md", "line": 1, "target": "t.md", "pin": "unpinned"}
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

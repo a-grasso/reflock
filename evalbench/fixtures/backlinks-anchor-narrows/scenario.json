@@ -1,0 +1,13 @@
+{
+  "description": "a target with an anchor lists only references to that anchor, not bare file references",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md#real", "--format", "json"],
+      "expect_json": [
+        {"file": "a.md", "line": 1, "target": "t.md#real", "pin": "unpinned"}
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

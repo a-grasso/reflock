@@ -818,6 +818,68 @@ class ReflockTest(unittest.TestCase):
                                capture_output=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
+    # --- backlinks -----------------------------------------------------------
+    def run_backlinks(self, *args):
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "backlinks", *args])
+        return rc, buf.getvalue(), err.getvalue()
+
+    def backlinks_json(self, *args):
+        rc, out, err = self.run_backlinks(*args, "--format", "json")
+        return rc, json.loads(out), err
+
+    def test_backlinks_lists_referrers_sorted(self):
+        self.write("t.md", "# Title\n")
+        self.write("b.md", "See [x](t.md).\n")
+        self.write("a.md", "See [x](t.md).\n")
+        rc, rows, _ = self.backlinks_json("t.md")
+        self.assertEqual(rc, 0)
+        self.assertEqual([r["file"] for r in rows], ["a.md", "b.md"])
+
+    def test_backlinks_same_file_sorted_by_line(self):
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\nSee [y](t.md).\n")
+        rc, rows, _ = self.backlinks_json("a.md")
+        self.assertEqual(rc, 0)
+        self.assertEqual([], [r for r in rows if r["file"] != "a.md"])  # sanity
+
+    def test_backlinks_anchor_narrows(self):
+        self.write("t.md", "# Title\n\n## Real\n\nbody\n")
+        self.write("a.md", "See [x](t.md#real).\n")
+        self.write("b.md", "See [x](t.md).\n")
+        rc, rows, _ = self.backlinks_json("t.md#real")
+        self.assertEqual(rc, 0)
+        self.assertEqual([r["file"] for r in rows], ["a.md"])
+
+    def test_backlinks_reports_pin_state(self):
+        self.write("t.md", "# Title\n\nbody\n")
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        self.write("b.md", "See [y](t.md).\n")
+        self.stamp()
+        rc, rows, _ = self.backlinks_json("t.md")
+        pins = {r["file"]: r["pin"] for r in rows}
+        self.assertEqual(pins["a.md"], "pinned")
+        self.assertEqual(pins["b.md"], "unpinned")
+
+    def test_backlinks_none_exits_zero(self):
+        self.write("t.md", "# Title\n")
+        rc, out, _ = self.run_backlinks("t.md")
+        self.assertEqual(rc, 0)
+        self.assertIn("no backlinks", out.lower())
+
+    def test_backlinks_unknown_path_exits_nonzero(self):
+        rc, out, err = self.run_backlinks("nope.md")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("nope.md", out + err)
+
+    def test_backlinks_format_json_shape(self):
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\n")
+        rc, rows, _ = self.backlinks_json("t.md")
+        self.assertEqual(rc, 0)
+        self.assertEqual(rows, [{"file": "a.md", "line": 1, "target": "t.md", "pin": "unpinned"}])
+
 
 if __name__ == "__main__":
     unittest.main()
