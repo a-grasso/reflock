@@ -211,6 +211,15 @@ something's wrong. With `--format json`, `-q` leaves the findings array on
 stdout untouched and just suppresses the human summary line. `-q --verbose`
 is contradictory and exits nonzero naming both flags.
 
+`reflock completion {bash,zsh,fish}` prints a static completion script for the
+named shell to stdout - it writes nothing and installs nothing itself:
+
+```bash
+reflock completion bash > /etc/bash_completion.d/reflock
+reflock completion zsh  > ~/.zsh/completions/_reflock   # keep the directory on fpath
+reflock completion fish > ~/.config/fish/completions/reflock.fish
+```
+
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
 source of truth reflock exists to keep A and B from silently disagreeing about.

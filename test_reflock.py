@@ -759,6 +759,65 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(reflock.normalize("one   two\nthree"), b"one two three")
         self.assertEqual(reflock.normalize("text<!--@a1b2c3d4-->more"), b"textmore")
 
+    # --- shell completion (ID-11) --------------------------------------------
+    def test_completion_parity_subcommands_and_flags(self):
+        spec = reflock.parser_spec()
+        for shell in reflock.COMPLETION_SHELLS:
+            script = reflock.completion_script(shell)
+            for sub, flags in spec.items():
+                self.assertIn(sub, script, f"{shell} script missing subcommand {sub!r}")
+                for flag in flags:
+                    if flag.startswith("--"):
+                        self.assertIn(flag, script,
+                                      f"{shell} script missing flag {flag!r} for {sub!r}")
+
+    def test_completion_unsupported_shell_exits_nonzero(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf), self.assertRaises(SystemExit) as ctx:
+            reflock.main(["completion", "tcsh"])
+        self.assertNotEqual(ctx.exception.code, 0)
+        out = buf.getvalue()
+        for shell in reflock.COMPLETION_SHELLS:
+            self.assertIn(shell, out)
+
+    def test_completion_scripts_nonempty(self):
+        for shell in reflock.COMPLETION_SHELLS:
+            self.assertTrue(reflock.completion_script(shell).strip())
+
+    def test_completion_writes_nothing_to_disk(self):
+        before = set(os.listdir(self.d))
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "completion", "bash"])
+        self.assertEqual(before, set(os.listdir(self.d)))
+
+    def test_completion_prints_to_stdout(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "completion", "zsh"])
+        self.assertEqual(rc, 0)
+        self.assertIn("reflock", buf.getvalue())
+
+    def test_completion_bash_script_parses_under_bash(self):
+        bash = shutil.which("bash")
+        if not bash:
+            self.skipTest("bash not available")
+        import subprocess
+        script = reflock.completion_script("bash")
+        proc = subprocess.run([bash, "-n"], input=script, text=True,
+                               capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_completion_zsh_script_parses_under_zsh(self):
+        zsh = shutil.which("zsh")
+        if not zsh:
+            self.skipTest("zsh not available")
+        import subprocess
+        script = reflock.completion_script("zsh")
+        proc = subprocess.run([zsh, "-n"], input=script, text=True,
+                               capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
