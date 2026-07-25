@@ -68,6 +68,14 @@ MD_REF = re.compile(
 CODE_REF = re.compile(
     r"(?:#|//|/\*|<!--|--|;|\*)\s*REF:\s*(?P<target>[^\s@]+)(?:\s+@(?P<pin>[0-9a-f]*))?"
 )
+# A reference-style link *definition* - `[id]: target "title"`. The pin lives
+# here, on the definition line, since a definition names its target exactly
+# once while usages (`[text][id]`, `[id][]`, the unsupported shortcut `[id]`)
+# may repeat it many times.
+REF_DEF = re.compile(
+    r'^\s*\[[^\]]+\]:\s+(?P<target>\S+?)(?:\s+"[^"]*")?'
+    r"(?:\s*<!--@(?P<pin>[0-9a-f]*)-->)?\s*$"
+)
 ANCHOR_OPEN = re.compile(r"reflock-anchor:\s*(?P<name>[\w.\-/]+)")
 ANCHOR_END = re.compile(r"reflock-anchor-end:\s*(?P<name>[\w.\-/]+)")
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*\s*$")
@@ -273,7 +281,7 @@ def parse_refs(idx: Index, rel: str) -> list[Ref]:
         # Inline code spans are exempt on the same basis as fenced blocks;
         # masking (not stripping) keeps every other match's column correct.
         scan = mask_code_spans(ln) if is_md else ln
-        patterns = [(MD_REF, "md")] if is_md else []
+        patterns = [(MD_REF, "md"), (REF_DEF, "md")] if is_md else []
         patterns.append((CODE_REF, "code"))
         for pat, kind in patterns:
             for m in pat.finditer(scan):

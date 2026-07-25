@@ -200,6 +200,83 @@ class ReflockTest(unittest.TestCase):
         self.assertRegex(content, r"\(t\.md#decision\)<!--@[0-9a-f]{8}-->")
         self.assertEqual(self.verdict("a.md"), "OK")
 
+    # --- reference-style markdown links (NS-02a) --------------------------
+    def test_refstyle_full_form_one_ref_at_definition_line(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "The tokenizer feeds [the loader][loader-ref] directly.\n"
+                            "\n"
+                            "[loader-ref]: t.md#real\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].line, 3)
+        self.assertEqual(refs[0].target, "t.md#real")
+        self.assertEqual(refs[0].kind, "md")
+
+    def test_refstyle_collapsed_form_one_ref_at_definition_line(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "[loader-ref][]\n"
+                            "\n"
+                            "[loader-ref]: t.md#real\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].line, 3)
+        self.assertEqual(refs[0].target, "t.md#real")
+
+    def test_refstyle_shortcut_form_ignored(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "[loader-ref]\n"
+                            "\n"
+                            "[loader-ref]: t.md#real\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].line, 3)
+
+    def test_refstyle_existing_pin_parsed(self):
+        self.write("a.md", "[loader-ref]: t.md#real <!--@abcd1234-->\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].pin, "abcd1234")
+        s, e = refs[0].pin_span
+        self.assertEqual(refs[0].target, "t.md#real")
+        line = reflock.build_index(self.d).lines["a.md"][0]
+        self.assertEqual(line[s:e], "abcd1234")
+
+    def test_refstyle_leading_whitespace(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "  [loader-ref]: t.md#real\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "t.md#real")
+
+    def test_refstyle_fence_skipped(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "```\n[loader-ref]: t.md#real\n```\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(refs, [])
+
+    def test_refstyle_title_tolerated(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", '[loader-ref]: t.md#real "Some title"\n')
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "t.md#real")
+
+    def test_refstyle_dangling_reported_at_definition_line(self):
+        self.write("a.md", "The tokenizer feeds [the loader][loader-ref] directly.\n"
+                            "\n"
+                            "[loader-ref]: missing.md\n")
+        self.assertEqual(self.verdict("a.md"), "DANGLING")
+
+    def test_refstyle_usage_not_stamped(self):
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "The tokenizer feeds [the loader][loader-ref] directly.\n"
+                            "\n"
+                            "[loader-ref]: t.md#real<!--@-->\n")
+        self.stamp()
+        content = self.read("a.md")
+        self.assertIn("The tokenizer feeds [the loader][loader-ref] directly.\n", content)
+        self.assertRegex(content, r"\[loader-ref\]: t\.md#real<!--@[0-9a-f]{8}-->")
+
     def test_binary_target_treated_as_empty_unit(self):
         with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
             fh.write(b"\x00\x01binary")

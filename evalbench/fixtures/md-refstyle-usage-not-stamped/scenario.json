@@ -1,0 +1,19 @@
+{
+  "description": "stamp writes the pin on the reference-style definition line only, leaving the usage line byte-identical.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_file_regex": {
+        "a.md": "The tokenizer feeds \\[the loader\\]\\[loader-ref\\] directly\\.\\n\\n\\[loader-ref\\]: t\\.md#real<!--@[0-9a-f]{8}-->\\n"
+      }
+    },
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
