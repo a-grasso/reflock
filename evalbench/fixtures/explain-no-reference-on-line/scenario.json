@@ -1,0 +1,10 @@
+{
+  "description": "a line with no reference exits nonzero with a clear message",
+  "steps": [
+    {
+      "cmd": "explain",
+      "args": ["a.md:1"],
+      "expect_exit": 2
+    }
+  ]
+}

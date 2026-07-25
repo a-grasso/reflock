@@ -63,10 +63,6 @@ than by priority tier.
 9. ~~**Colorized terminal output.**~~ Implemented: `check`'s verdict labels
    are colored by severity, honoring `NO_COLOR`, `--no-color`, and non-tty
    auto-detection.
-10. **`reflock explain <file>:<line>`.** One command that prints everything
-    about a single reference — resolved target, anchor, current vs. pinned
-    fingerprint, the actual unit text on both sides — instead of making
-    someone reconstruct that by hand from a `check` line and a manual diff.
 12. **A config file (`reflock.toml` / `.reflock.yml`).** `--root`, ignore
     patterns, default output format, and future per-path pin policy currently
     have to be repeated as flags in every hook and every CI step. One file,

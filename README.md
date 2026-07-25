@@ -194,6 +194,7 @@ reflock stamp --rebless doc/DESIGN.md   # accept current target state for these 
 reflock stamp --check   # report what stamp would do, write nothing (exit 1 if not a no-op)
 reflock suspects --all # bare path-shaped tokens that resolve to nothing
 reflock backlinks doc/DESIGN.md   # what points at this file, before you edit it
+reflock explain doc/DESIGN.md:42  # everything about one reference
 ```
 
 `check` colors verdict labels by severity when stdout is a terminal; pass
@@ -233,6 +234,20 @@ nonzero, since silently reporting zero backlinks for a typo'd filename would
 mislead. It's read-only and supports `--format <human|json>` per the same
 renderer `check` uses; the JSON shape is a list of
 `{"file", "line", "target", "pin"}` objects.
+
+`reflock explain <file>:<line>` prints everything about the reference(s) on
+that line - resolved target, matched anchor and its line span, pin, current
+fingerprint, verdict, and the actual unit text that was fingerprinted -
+instead of making you reconstruct that by hand from a `check` line and a
+manual diff. A line with more than one reference reports all of them, in
+column order; a line with none exits nonzero. It's read-only and reuses the
+same `classify` logic `check` uses, so the verdict it reports can never
+disagree with `check`. When a reference is `DRIFTED`, only the *pinned
+text's hash* was ever stored (see the fingerprinting decision above) -
+`explain` shows the current text and both hashes, and says plainly that the
+prior text is not recoverable; it does not shell out to git history to
+reconstruct it. Supports `--format <human|json>` per the same renderer
+pattern.
 
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
