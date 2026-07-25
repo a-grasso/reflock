@@ -160,8 +160,13 @@ def is_text(path: str) -> bool:
 
 def slugify(text: str) -> str:
     """GitHub-style heading slug for typical headings."""
-    s = re.sub(r"`([^`]*)`", r"\1", text)          # drop code spans, keep content
-    s = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", s)  # [t](u) -> t
+    # Reduce `[t](u)` -> `t` only outside code spans: inside backticks, link
+    # syntax is literal text and GitHub slugs it verbatim. Odd indices are the
+    # captured spans, whose contents are kept but never re-parsed.
+    parts = re.split(r"(`[^`]*`)", text)
+    for i, p in enumerate(parts):
+        parts[i] = p[1:-1] if i % 2 else re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", p)
+    s = "".join(parts)
     s = re.sub(r"[*_~]", "", s)                     # emphasis markers
     s = s.strip().lower()
     s = re.sub(r"[^\w\- ]", "", s, flags=re.UNICODE)

@@ -1,0 +1,281 @@
+# reflock work queue
+#
+# The machine-readable projection of NORTHSTARS.md and IDEAS.md, for an
+# orchestrator to answer one question: "what is the next unblocked item, and
+# may an agent touch it?" The reasoning stays in the prose docs - this file
+# holds only what a scheduler needs. If the two disagree, the prose wins and
+# this file is stale.
+#
+# Cross-cutting calls the contracts depend on live in roadmap/DECIDED.md.
+#
+# Selection rule for a linear grind: take the FIRST item, in file order, whose
+# status is `ready` and every one of whose blocked_by ids is `done`. File order
+# is therefore the intended sequence, not incidental - reorder deliberately.
+#
+# owner:
+#   agent  - mechanical and additive; contract states the definition of done
+#   human  - needs a design decision, changes a published format, or touches a
+#            question DECISIONS.md has already settled
+#
+# status:
+#   ready          - contract written, may be picked up once blocked_by clears
+#   needs-spec     - agent-ownable but no acceptance contract yet
+#   needs-decision - an agent hit an ambiguity; a human must answer before it
+#                    can proceed. Agents set this, never clear it.
+#   blocked        - see blocked_by
+#   in-progress    - an agent or branch holds it
+#   done           - shipped; the source entry in NORTHSTARS/IDEAS is deleted
+#
+# Invariant for every item, never restated per-entry: `make test`, `make bench`,
+# `make check` and `make suspects` all pass, and one commit is one item.
+
+version: 1
+
+items:
+  # --- agent-ownable, in intended order -------------------------------------
+  - id: BUG-02
+    title: Inline code spans are parsed as live references
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-02-inline-code-spans.md
+    blocked_by: []
+    touches: [reflock.py]
+    note: >
+      First on purpose: it removes a false-positive class that makes every
+      later contract and README edit harder to write, and the span-masking
+      mechanism it introduces is what NS-02a/NS-02b inherit.
+
+  - id: FMT-01
+    title: One reporting layer behind --format
+    source: roadmap/DECIDED.md
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/FMT-01-reporting-layer.md
+    blocked_by: []
+    touches: [reflock.py]
+    note: >
+      Pure refactor plus one flag, no output change. Four items depend on it,
+      so it lands before them rather than having each invent its own printing.
+
+  - id: NS-02a
+    title: Reference-style markdown links
+    source: NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/NS-02a-reference-style-links.md
+    blocked_by: []
+    touches: [reflock.py]
+    note: >
+      The half of northstar #2 that had no open question - same target string
+      in a different syntactic position. Split out so it was not held up by
+      the wiki-link resolution decision.
+
+  - id: NS-03
+    title: stamp --check (verify without mutating)
+    source: NORTHSTARS.md#3-stamp---check-verify-without-mutating-near
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/NS-03-stamp-check.md
+    blocked_by: []
+    touches: [reflock.py]
+
+  - id: NS-02b
+    title: Wiki-links
+    source: NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/NS-02b-wiki-links.md
+    blocked_by: [NS-02a]
+    touches: [reflock.py]
+    note: >
+      Sequenced after NS-02a - both touch parse_refs and would conflict on
+      every hunk. Resolution semantics are locked in DECIDED.md D4.
+
+  - id: ID-13
+    title: Quiet/errors-only mode with a one-line summary
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/ID-13-quiet-mode.md
+    blocked_by: [FMT-01]
+    touches: [reflock.py]
+    note: >
+      Smaller than the IDEAS entry implies - the entry predates --verbose and
+      describes behavior that is already the default. Contract corrects it.
+
+  - id: ID-11
+    title: reflock completion <shell>
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/ID-11-completion.md
+    blocked_by: []
+    touches: [reflock.py]
+    note: >
+      The IDEAS entry's premise is wrong - argparse cannot generate
+      completions. Hand-written scripts plus a parser-driven parity test.
+
+  - id: ID-15
+    title: reflock backlinks <path>
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/ID-15-backlinks.md
+    blocked_by: [FMT-01]
+    touches: [reflock.py]
+    note: Read-only query over the existing index; no new grammar.
+
+  - id: ID-10
+    title: "reflock explain <file>:<line>"
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/ID-10-explain.md
+    blocked_by: [FMT-01]
+    touches: [reflock.py]
+
+  - id: NS-04
+    title: "--format github: CI-native inline annotations"
+    source: NORTHSTARS.md#4-ci-native-output-inline-annotations-not-just-a-log-block-near
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/NS-04-github-format.md
+    blocked_by: [FMT-01, ID-13]
+    touches: [reflock.py]
+
+  - id: ID-21
+    title: pre-commit framework manifest (.pre-commit-hooks.yaml)
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/ID-21-pre-commit-manifest.md
+    blocked_by: [NS-03]
+    touches: [.pre-commit-hooks.yaml, README.md]
+    note: The advisory hook it ships needs stamp --check to exist first.
+
+  # --- done ------------------------------------------------------------------
+  - id: BUG-01
+    title: slugify treats link syntax inside a heading code span as a link
+    source: roadmap/BUG-01-slugify-code-span.md
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/BUG-01-slugify-code-span.md
+    blocked_by: []
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    note: >
+      Same class as closed issue #4 - a slug that diverged from GitHub's,
+      producing a false DANGLING. Found by dogfooding this queue.
+
+  # --- human-owned: design decisions ----------------------------------------
+  # Listed so the orchestrator can see them and skip them, not to schedule them.
+  - id: NS-01
+    title: Cross-repo references are silently OK, not even checked
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Carries "do this first" in the prose. Sequencing call, not agent work.
+
+  - id: NS-11
+    title: Stamp format has no version tag
+    source: NORTHSTARS.md
+    tier: near
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: >
+      Near, but it is a published wire format. Decide before wide adoption.
+      NS-02a and NS-02b both widen what gets stamped, so either land them
+      first or re-stamp after this.
+
+  - id: NS-10
+    title: Re-blessing a DRIFTED reference is one flag from a rubber stamp
+    source: NORTHSTARS.md
+    tier: near
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Policy question about trust, not a mechanical gap.
+
+  - id: ID-12
+    title: A config file (reflock.toml / .reflock.yml)
+    source: IDEAS.md
+    tier: near
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: >
+      Zero-dependency stdlib parsing constrains the format choice, and it
+      would become the home for future per-path pin policy. Yours.
+
+  - id: NS-05
+    title: Symbol-level code anchors without hand-placed markers
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-06
+    title: Anchors into config/data files by key path
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-07
+    title: Reference repair on file move/rename
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-12
+    title: A vendored copy of a doc carries stamps that don't belong here
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-08
+    title: "Scale: incremental/cached indexing for large monorepos"
+    source: NORTHSTARS.md
+    tier: far
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Subsumes ID-01, ID-02, ID-04.
+
+  - id: NS-09
+    title: "Editor/LSP integration"
+    source: NORTHSTARS.md
+    tier: far
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Subsumes ID-05, ID-22.
+
+  - id: NS-LANG
+    title: When Python stops being the right host
+    source: NORTHSTARS.md#language--runtime-when-python-stops-being-the-right-host-far-cross-cutting
+    tier: far
+    owner: human
+    status: blocked
+    blocked_by: [design]

@@ -1,0 +1,11 @@
+{
+  "description": "A heading whose code span contains link syntax slugs like GitHub does: the code span's contents are literal, not a link to reduce. The anchor resolves, so this is OK, not DANGLING.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
