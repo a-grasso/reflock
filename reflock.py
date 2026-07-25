@@ -15,6 +15,8 @@ Reference surface forms
   Markdown link (optionally pinned):
       [text](relative/path.md#anchor)<!--@a1b2c3d4-->
       [text](relative/path.md#anchor)<!--@-->        # opt-in, not yet stamped
+      [text](relative/path.md#anchor).<!--@a1b2c3d4-->  # sentence punctuation
+                                                        # before the pin is fine
 
   REF comment (any text or code file):
       # REF: relative/path.kt#Symbol @a1b2c3d4
@@ -59,7 +61,7 @@ FP_LEN = 8  # hex chars of sha256; 32 bits — a missed drift is ~1 in 4e9
 # own group so `stamp` can splice it in place (empty group == opted-in, unstamped).
 MD_REF = re.compile(
     r"\[[^\]]*\]\((?P<target>[^)\s]+)(?:\s+\"[^\"]*\")?\)"
-    r"(?:\s*<!--@(?P<pin>[0-9a-f]*)-->)?"
+    r"(?:[\s.,;:!?]*<!--@(?P<pin>[0-9a-f]*)-->)?"
 )
 # A REF comment: a comment opener, then `REF: target`, optional ` @hex`.
 # The opener requirement keeps `REF:` inside prose or string literals from matching.

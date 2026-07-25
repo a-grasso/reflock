@@ -190,6 +190,25 @@ class ReflockTest(unittest.TestCase):
         self.write("lib.py", "# reflock-anchor: run\ndef run():\n    return 99\n# reflock-anchor-end: run\n")
         self.assertEqual(self.verdict("caller.py"), "DRIFTED")
 
+    def test_pin_after_sentence_punctuation(self):
+        # the README's canonical form: `…#decision).<!--@-->` — punctuation
+        # between the link and the pin must not silently demote it to unpinned
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision).<!--@-->\n")
+        self.assertEqual(self.verdict("a.md"), "UNSTAMPED")
+        self.stamp()
+        self.assertRegex(self.read("a.md"), r"\)\.<!--@[0-9a-f]{8}-->")
+        self.assertEqual(self.verdict("a.md"), "OK")
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose Y instead.\n")
+        self.assertEqual(self.verdict("a.md"), "DRIFTED")
+
+    def test_pin_not_stolen_across_sentence(self):
+        # a pin that belongs to a later link must not attach to an earlier one
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "See [a](t.md). Per [d](t.md#decision)<!--@-->.\n")
+        vs = self.verdicts("a.md")
+        self.assertEqual([v[0] for v in vs], ["OK", "UNSTAMPED"])
+
     def test_stamp_skips_dangling_ref(self):
         self.write("t.md", "# H\n\n## Real\n\nbody\n")
         self.write("a.md", "Per [d](t.md#ghost)<!--@-->.\n")
