@@ -1,0 +1,13 @@
+{
+  "description": "check --format github emits a GitHub ::error annotation for a DANGLING finding, with file and line set",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--format", "github"],
+      "expect_exit": 1,
+      "expect_contains": [
+        "::error file=a.md,line=1,title=DANGLING::no such file: missing.md"
+      ]
+    }
+  ]
+}

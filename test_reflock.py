@@ -640,6 +640,57 @@ class ReflockTest(unittest.TestCase):
         self.assertNotEqual(cm.exception.code, 0)
         self.assertIn("invalid choice", buf_err.getvalue())
 
+    # --- --format github ----------------------------------------------------
+    def test_format_github_dangling_is_error(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, out = self.run_check("--format", "github")
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.strip(),
+                          "::error file=a.md,line=1,title=DANGLING::no such file: missing.md")
+
+    def test_format_github_unstamped_is_warning(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        self.write("a.md", "See [x](t.md#real)<!--@-->.\n")
+        rc, out = self.run_check("--format", "github")
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.strip(),
+                          "::warning file=a.md,line=1,title=UNSTAMPED::run: reflock stamp")
+
+    def test_format_github_clean_emits_nothing(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        rc, out = self.run_check("--format", "github")
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_format_github_no_summary_or_color(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, out = self.run_check("--format", "github")
+        self.assertNotIn("problem(s)", out)
+        self.assertNotIn("\033[", out)
+
+    def test_github_escape_property_escapes_percent_colon_comma_newline_cr(self):
+        self.assertEqual(reflock.github_escape_property("a%b:c,d\r\ne"),
+                          "a%25b%3Ac%2Cd%0D%0Ae")
+
+    def test_github_escape_message_escapes_percent_newline_cr_but_not_colon_comma(self):
+        self.assertEqual(reflock.github_escape_message("a%b:c,d\r\ne"),
+                          "a%25b:c,d%0D%0Ae")
+
+    def test_format_github_escapes_detail(self):
+        self.write("a.md", "See [x](weird%file,name.md).\n")
+        rc, out = self.run_check("--format", "github")
+        line = out.strip()
+        self.assertEqual(
+            line,
+            "::error file=a.md,line=1,title=DANGLING::"
+            "no such file: weird%25file,name.md")
+
+    def test_format_github_verdict_level_mapping(self):
+        self.assertEqual(reflock.GITHUB_LEVEL["DANGLING"], "error")
+        self.assertEqual(reflock.GITHUB_LEVEL["DRIFTED"], "error")
+        self.assertEqual(reflock.GITHUB_LEVEL["UNSTAMPED"], "warning")
+        self.assertNotIn("OK", reflock.GITHUB_LEVEL)
+
     # --- -q/--quiet --------------------------------------------------------
     def test_quiet_clean_tree_is_silent(self):
         self.write("t.md", "# H\n\n## Real\n\nbody\n")

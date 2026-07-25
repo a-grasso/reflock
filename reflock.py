@@ -475,7 +475,34 @@ def render_human(results, problems: int, args) -> int:
     return 1 if problems else 0
 
 
-RENDERERS = {"human": render_human, "json": render_json}
+GITHUB_LEVEL = {"DANGLING": "error", "DRIFTED": "error", "UNSTAMPED": "warning"}
+
+
+def github_escape_property(text: str) -> str:
+    """Escape a workflow-command property value (e.g. file=, line=)."""
+    return (text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                .replace(":", "%3A").replace(",", "%2C"))
+
+
+def github_escape_message(text: str) -> str:
+    """Escape workflow-command message data (no colon/comma escaping needed)."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def render_github(results, problems: int, args) -> int:
+    for v, r, d in results:
+        level = GITHUB_LEVEL.get(v)
+        if level is None:
+            continue
+        file_ = github_escape_property(r.src)
+        line = r.line
+        title = github_escape_property(v)
+        message = github_escape_message(d)
+        print(f"::{level} file={file_},line={line},title={title}::{message}")
+    return 1 if problems else 0
+
+
+RENDERERS = {"human": render_human, "json": render_json, "github": render_github}
 
 
 class FormatConflict(Exception):

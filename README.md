@@ -201,10 +201,12 @@ reflock explain doc/DESIGN.md:42  # everything about one reference
 `--no-color` or set `NO_COLOR` (https://no-color.org) to turn that off, or pipe
 output anywhere and it's plain text automatically.
 
-`check --format <human|json>` selects the output format; `human` is the
+`check --format <human|json|github>` selects the output format; `human` is the
 default. `--json` is a retained alias for `--format json`. Passing both is
 fine as long as they agree; passing `--json` with a conflicting `--format`
-exits nonzero with an error naming both flags.
+exits nonzero with an error naming both flags. `github` emits GitHub Actions
+inline annotations - see [Three gates, three trust boundaries](#three-gates-three-trust-boundaries)
+below for the CI usage.
 
 `check -q` / `check --quiet` prints nothing on success; on failure it prints
 one summary line - `reflock: 1 of 137 references failed` - to **stderr** and
@@ -286,6 +288,17 @@ reflock stamp --check || echo "Some pins are stale; run 'reflock stamp'."
 
 **2. CI (the server backstop).** One job step: `reflock check`. Nonzero exit fails
 the build. Deterministic, cacheable, no secrets.
+
+On GitHub Actions, `check --format github` emits
+[workflow commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions)
+instead of the human report, so each finding lands as an inline annotation on
+its exact line of the PR diff rather than a log block someone has to open:
+```yaml
+- run: reflock check --format github
+```
+`DANGLING` and `DRIFTED` findings emit `::error`; `UNSTAMPED` emits `::warning`.
+A clean tree prints nothing on stdout. Exit codes are unchanged from the
+default format.
 
 **3. The Stop hook (the agent).** The one people forget. When an AI coding agent
 (e.g. Claude Code) edits your docs, it can *declare itself done* with references

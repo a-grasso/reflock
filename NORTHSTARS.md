@@ -62,32 +62,6 @@ actually occurs.
 
 ---
 
-## 4. CI-native output: inline annotations, not just a log block *(Near)*
-
-**The scenario:** a reviewer wants a `DANGLING` or `DRIFTED` finding to show
-up as an inline comment on the exact changed line in a GitHub PR diff - the
-way ESLint, mypy, and most linters already integrate with GitHub Actions -
-instead of a flat report buried in a build log that nobody opens unless the
-job is already red.
-
-**Why reflock can't do this today:** `check --json` is a fine machine format,
-but nothing translates it into the annotation formats CI systems actually
-render inline (`::error file=...,line=...::message` for GitHub Actions,
-SARIF for GitHub's code-scanning tab, similar conventions for GitLab).
-Every adopter has to write that translation layer themselves.
-
-**Shape of a solution:** `reflock check --format=github` (or `--format=sarif`)
-alongside the existing plain/`--json` output - a formatting concern only,
-the verdict computation doesn't change at all.
-
-**Worth knowing:** this is a place where inline pins (DECISIONS.md #1) give
-reflock something a lockfile-based tool can't easily match - a finding already
-carries the exact file and line of the *reference*, which is what an inline PR
-annotation needs. [drift](DECISIONS.md#prior-art-under-observation)'s GitHub
-Action is install-only and emits no annotations.
-
----
-
 ## 5. Symbol-level code anchors without hand-placed markers *(Medium)*
 
 **The scenario:** `// REF: src/auth/session.py#validate_token` should resolve
