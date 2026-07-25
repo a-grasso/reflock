@@ -1,0 +1,221 @@
+# reflock work queue
+#
+# The machine-readable projection of NORTHSTARS.md and IDEAS.md, for an
+# orchestrator to answer one question: "what is the next unblocked item, and
+# may an agent touch it?" The reasoning stays in the prose docs - this file
+# holds only what a scheduler needs. If the two disagree, the prose wins and
+# this file is stale.
+#
+# owner:
+#   agent  - mechanical and additive; contract can be stated as a test up front
+#   human  - needs a design decision, changes a published format, or touches a
+#            question DECISIONS.md has already settled
+#
+# status:
+#   ready       - contract written, unblocked, may be picked up
+#   needs-spec  - agent-ownable but no acceptance contract yet; write one first
+#   blocked     - see blocked_by
+#   in-progress - an agent or branch holds it
+#   done        - shipped; delete the source entry from NORTHSTARS/IDEAS
+#
+# Invariant for every item, never restated per-entry: `make test`, `make bench`,
+# `make check` and `make suspects` all pass on the resulting branch, and the
+# terminal state is an open PR - never a merge to main.
+
+version: 1
+
+items:
+  # --- agent-ownable ---------------------------------------------------------
+  - id: NS-02
+    title: Markdown link forms beyond [text](target)
+    source: NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/NS-02-markdown-link-forms.md
+    blocked_by: []
+    touches: [reflock.py]
+    note: >
+      Best first agent target: pure grammar surface area, plugs into the
+      existing Ref/classify pipeline, verifiable entirely by fixtures.
+
+  - id: BUG-01
+    title: slugify treats link syntax inside a heading code span as a link
+    source: roadmap/BUG-01-slugify-code-span.md
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/BUG-01-slugify-code-span.md
+    blocked_by: []
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    note: >
+      Same class as closed issue #4 - a slug that diverges from GitHub's,
+      producing a false DANGLING. Found by dogfooding this queue.
+
+  - id: BUG-02
+    title: Inline code spans are parsed as live references
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+    touches: [reflock.py]
+    note: >
+      MD_REF and CODE_REF fire inside single-backtick spans, so any doc that
+      *documents* link or REF syntax in prose gets false DANGLINGs. Fenced
+      blocks are already exempt; inline spans are not. Hit three times while
+      writing the first two contracts in this queue - a doc-authoring tool
+      that cannot document its own syntax inline is a real false-positive
+      source, and false positives are what kill trust in a gate.
+
+  - id: NS-03
+    title: stamp --check (verify without mutating)
+    source: NORTHSTARS.md#3-stamp---check-verify-without-mutating-near
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+    touches: [reflock.py]
+
+  - id: NS-04
+    title: "CI-native output: inline annotations"
+    source: NORTHSTARS.md#4-ci-native-output-inline-annotations-not-just-a-log-block-near
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: [ID-13]
+    note: >
+      Serialized after ID-13 on purpose - both rewrite the same reporting
+      path, and two agents in parallel there will conflict on every hunk.
+
+  - id: ID-13
+    title: Quiet/errors-only mode with a one-line summary
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+    touches: [reflock.py]
+
+  - id: ID-11
+    title: Shell completion (bash/zsh/fish)
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+
+  - id: ID-15
+    title: reflock backlinks <path>
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+    note: Read-only query over the existing index; no new grammar.
+
+  - id: ID-10
+    title: "reflock explain <file>:<line>"
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+
+  - id: ID-21
+    title: pre-commit framework manifest (.pre-commit-hooks.yaml)
+    source: IDEAS.md
+    tier: near
+    owner: agent
+    status: needs-spec
+    blocked_by: []
+
+  # --- human-owned: design decisions ----------------------------------------
+  # Listed so the orchestrator can see them and skip them, not to schedule them.
+  - id: NS-01
+    title: Cross-repo references are silently OK, not even checked
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Carries "do this first" in the prose. Sequencing call, not agent work.
+
+  - id: NS-11
+    title: Stamp format has no version tag
+    source: NORTHSTARS.md
+    tier: near
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: >
+      Near, but it is a published wire format. Decide before wide adoption.
+      Any agent item that changes what gets stamped (NS-02) should land first
+      or be re-stamped after this.
+
+  - id: NS-10
+    title: Re-blessing a DRIFTED reference is one flag from a rubber stamp
+    source: NORTHSTARS.md
+    tier: near
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Policy question about trust, not a mechanical gap.
+
+  - id: NS-05
+    title: Symbol-level code anchors without hand-placed markers
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-06
+    title: Anchors into config/data files by key path
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-07
+    title: Reference repair on file move/rename
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-12
+    title: A vendored copy of a doc carries stamps that don't belong here
+    source: NORTHSTARS.md
+    tier: medium
+    owner: human
+    status: blocked
+    blocked_by: [design]
+
+  - id: NS-08
+    title: "Scale: incremental/cached indexing for large monorepos"
+    source: NORTHSTARS.md
+    tier: far
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Subsumes ID-01, ID-02, ID-04.
+
+  - id: NS-09
+    title: "Editor/LSP integration"
+    source: NORTHSTARS.md
+    tier: far
+    owner: human
+    status: blocked
+    blocked_by: [design]
+    note: Subsumes ID-05, ID-22.
+
+  - id: NS-LANG
+    title: When Python stops being the right host
+    source: NORTHSTARS.md#language--runtime-when-python-stops-being-the-right-host-far-cross-cutting
+    tier: far
+    owner: human
+    status: blocked
+    blocked_by: [design]
