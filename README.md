@@ -224,6 +224,10 @@ touching nothing else.
   `reflock-anchor` on hot sections if the churn annoys you.
 - **Fingerprints are whitespace- and reflow-invariant.** Rewrapping a paragraph
   won't flag it; changing a word will.
+- **Path arguments (`check`/`stamp`/`suspects [paths...]`) are resolved relative
+  to the current working directory**, not `--root` - same convention as `git`,
+  `find`, etc. Run from the repo root (or pass absolute paths) if you're
+  scripting against a `--root` that differs from your CWD.
 
 ## Prior art
 
@@ -238,7 +242,6 @@ tightly enough to stay quiet.
 
 ## Not yet supported
 
-- Symbol-level anchors resolved by a real parser (today: markdown sections,
-  explicit `reflock-anchor` spans, or whole-file).
-- Reference-style markdown links (`[t][ref]`) and link-definition blocks.
-- A daemon / editor integration for check-on-save.
+See [NORTHSTARS.md](NORTHSTARS.md) for the full, prioritized list of
+capabilities reflock doesn't have yet, the real-world scenario forcing each
+one, and the rough shape of a fix.

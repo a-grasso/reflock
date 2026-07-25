@@ -3,3 +3,9 @@
 # example/fixture references that are not real.
 reflock.py
 test_reflock.py
+NORTHSTARS.md
+
+# evalbench fixtures are deliberately broken/illustrative by design (they
+# assert reflock finds specific DANGLING/DRIFTED/UNSTAMPED verdicts) - not
+# real references into this repo.
+evalbench/fixtures/*

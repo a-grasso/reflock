@@ -1,0 +1,22 @@
+{
+  "description": "A REF comment using `<!-- -->` opener resolves like any other reference.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json",
+        "--verbose"
+      ],
+      "expect_exit": 0,
+      "expect_json": [
+        {
+          "verdict": "OK",
+          "file": "caller.html",
+          "line": 1,
+          "target": "target.md#sec",
+          "detail": "unpinned"
+        }
+      ]
+    }
+  ]
+}

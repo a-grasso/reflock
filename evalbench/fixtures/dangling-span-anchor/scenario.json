@@ -1,0 +1,21 @@
+{
+  "description": "A REF comment naming a reflock-anchor span that doesn't exist is DANGLING.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "DANGLING",
+          "file": "caller.py",
+          "line": 1,
+          "target": "lib.py#ghost",
+          "detail": "no anchor '#ghost' in lib.py"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "description": "A link to a real file but a heading anchor that doesn't exist is DANGLING.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "DANGLING",
+          "file": "a.md",
+          "line": 1,
+          "target": "t.md#ghost",
+          "detail": "no anchor '#ghost' in t.md"
+        }
+      ]
+    }
+  ]
+}

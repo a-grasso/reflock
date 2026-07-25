@@ -1,0 +1,27 @@
+{
+  "description": "A real link to a gitignored/untracked file IS DANGLING - unlike suspects, check does not consult gitignore to excuse a target. (Known asymmetry - see NORTHSTARS.md.)",
+  "git": {
+    "track": [
+      ".gitignore",
+      "a.md"
+    ]
+  },
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "DANGLING",
+          "file": "a.md",
+          "line": 1,
+          "target": "dist/bundle.js",
+          "detail": "no such file: dist/bundle.js"
+        }
+      ]
+    }
+  ]
+}

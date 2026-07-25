@@ -1,0 +1,19 @@
+{
+  "description": "A bare path-shaped mention in prose that resolves to nothing is a suspect.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "file": "a.md",
+          "line": 1,
+          "target": "platform/research.sh"
+        }
+      ]
+    }
+  ]
+}

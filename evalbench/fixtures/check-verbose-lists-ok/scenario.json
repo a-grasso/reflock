@@ -1,0 +1,45 @@
+{
+  "description": "--verbose additionally lists OK references; without it only problems are reported.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "DANGLING",
+          "file": "a.md",
+          "line": 1,
+          "target": "missing.md",
+          "detail": "no such file: missing.md"
+        }
+      ]
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--json",
+        "--verbose"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "OK",
+          "file": "a.md",
+          "line": 1,
+          "target": "t.md#real",
+          "detail": "unpinned"
+        },
+        {
+          "verdict": "DANGLING",
+          "file": "a.md",
+          "line": 1,
+          "target": "missing.md",
+          "detail": "no such file: missing.md"
+        }
+      ]
+    }
+  ]
+}
