@@ -1,0 +1,16 @@
+{
+  "description": "`stamp --check` on a fully stamped tree exits 0 and prints nothing actionable.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--check"],
+      "expect_exit": 0,
+      "expect_not_contains": ["would be stamped"]
+    }
+  ]
+}

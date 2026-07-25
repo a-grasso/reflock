@@ -173,6 +173,7 @@ Then, from any repo:
 reflock check          # report problems (exit 1 if any)
 reflock stamp          # fill empty pins
 reflock stamp --rebless doc/DESIGN.md   # accept current target state for these refs
+reflock stamp --check   # report what stamp would do, write nothing (exit 1 if not a no-op)
 reflock suspects --all # bare path-shaped tokens that resolve to nothing
 ```
 
@@ -210,6 +211,15 @@ Note this gate fires on partial work: a reference whose target lands in the
 reasonable. Gate at pre-push instead if that friction outweighs catching
 mistakes early - see
 [what each gate can honestly promise](DECISIONS.md#3-where-to-gate-and-what-each-gate-can-honestly-promise)<!--@c770f4c8-->.
+
+If you'd rather keep pre-commit advisory and enforce at pre-push, use
+`stamp --check` there instead of `check`: it computes exactly the edits
+`stamp` would make - a pin that's opted in but unstamped, or one whose hash
+would be rewritten - reports them, and writes nothing. Exit 0 means `stamp`
+would be a no-op.
+```bash
+reflock stamp --check || echo "Some pins are stale; run 'reflock stamp'."
+```
 
 **2. CI (the server backstop).** One job step: `reflock check`. Nonzero exit fails
 the build. Deterministic, cacheable, no secrets.

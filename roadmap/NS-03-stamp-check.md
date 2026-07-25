@@ -1,6 +1,6 @@
 # NS-03 acceptance contract: `stamp --check`
 
-Source: [northstar #3](../NORTHSTARS.md#3-stamp---check-verify-without-mutating-near)
+Source: northstar #3 (implemented; the source entry is deleted from NORTHSTARS.md per this contract's definition of done)
 Owner: agent · Tier: near · Touches: [reflock.py](../reflock.py)
 Locked decisions: [D5](DECIDED.md#d5-stamp---check-follows-the---check-convention), [D3](DECIDED.md#d3-zero-runtime-dependencies)
 

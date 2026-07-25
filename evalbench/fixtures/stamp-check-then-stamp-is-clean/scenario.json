@@ -1,0 +1,15 @@
+{
+  "description": "`stamp` followed by `stamp --check` exits 0.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--check"],
+      "expect_exit": 0
+    }
+  ]
+}

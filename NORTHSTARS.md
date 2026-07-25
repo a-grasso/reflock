@@ -86,30 +86,6 @@ design change. Locked in [DECIDED.md D4](roadmap/DECIDED.md#d4-wiki-link-resolut
 
 ---
 
-## 3. `stamp --check`: verify without mutating *(Near)*
-
-**The scenario:** a CI job wants to fail if any reference *should* be
-stamped but isn't up to date - the same "would this formatter change
-anything" check `prettier --check`, `terraform fmt -check`, and `black --check`
-already offer - without actually writing files in CI (which either requires
-a follow-up commit-back step, or gets silently discarded, either way not
-what you want in a gate).
-
-**Why reflock can't do this today:** `stamp` always writes. The only
-workaround is running it and then `git diff --exit-code`, which works but
-means every CI config reimplements the same two-line dance instead of
-reflock providing it directly, and it produces confusing diffs in CI logs
-mixed with the job's own output.
-
-**Shape of a solution:** `reflock stamp --check` computes the same edits
-`stamp` would make, reports what's unstamped/stale (reusing the `check`
-verdict machinery - an `UNSTAMPED` or a would-be `DRIFTED`-if-rebless-ran is
-already the right signal), and exits nonzero without touching disk. Small,
-mechanical, and closes a real CI ergonomics gap the "Three gates" section of
-the README already promises but doesn't fully deliver.
-
----
-
 ## 4. CI-native output: inline annotations, not just a log block *(Near)*
 
 **The scenario:** a reviewer wants a `DANGLING` or `DRIFTED` finding to show
@@ -427,11 +403,11 @@ scale, tree-sitter, or LSP. A stopgap, not the answer.
 
 ### Concrete sequencing
 
-1. **Stay in Python and finish the near work.** #2 (link grammars), #3
-   (`stamp --check`), #4 (CI-native output) are grammar and formatting changes
-   with zero language leverage - Python is the cheapest possible host for them,
-   and they are what settles the semantics. Porting before the semantics settle
-   means porting twice.
+1. **Stay in Python and finish the near work.** #2 (link grammars), #4
+   (CI-native output) are grammar and formatting changes with zero language
+   leverage - Python is the cheapest possible host for them, and they are what
+   settles the semantics. Porting before the semantics settle means porting
+   twice.
 2. **Separately, kill the subprocess wall time.** One git invocation instead of
    two, or walk the tree directly. No rewrite required.
 3. **Freeze the wire format before any port.** `normalize()` plus truncated
