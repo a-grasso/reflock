@@ -97,6 +97,21 @@ class ReflockTest(unittest.TestCase):
         for heading, slug in cases.items():
             self.assertEqual(reflock.slugify(heading), slug)
 
+    def test_slugify_does_not_reparse_code_span_contents(self):
+        # Inside a code span, link syntax is literal — GitHub never reduces
+        # `[t](u)` to `t` there, so neither may we. A heading's genuine inline
+        # links still reduce to their link text.
+        cases = {
+            "2. Markdown link forms beyond `[text](target)` *(Near)*":
+                "2-markdown-link-forms-beyond-texttarget-near",
+            "Use `[a](b)` here": "use-ab-here",
+            "See [the loader](x.md)": "see-the-loader",
+            "Mixed [real](r.md) and `[fake](f.md)`": "mixed-real-and-fakefmd",
+            "`a` and `b`": "a-and-b",
+        }
+        for heading, slug in cases.items():
+            self.assertEqual(reflock.slugify(heading), slug, heading)
+
     def test_anchor_with_stripped_punctuation(self):
         self.write("t.md", "# H\n\n## Modules, imports & visibility\n\nbody\n")
         self.write("a.md", "See [x](t.md#modules-imports--visibility).\n")
