@@ -13,6 +13,12 @@ Update or delete an entry the moment reflock grows the capability - a
 northstar that's already true is worse than no northstar, for the same reason
 reflock itself exists.
 
+Everything here is a capability to *add*. Questions already settled the other
+way - what reflock deliberately does not do, and the evidence for it - live in
+[DECISIONS.md](DECISIONS.md), which is also the one place a competing tool's
+observed state is recorded, so entries below can cite it instead of each
+carrying their own copy that ages separately.
+
 ## Priority tiers
 
 - **Near** - mechanical, additive, doesn't change the core model. Could land
@@ -127,6 +133,12 @@ Every adopter has to write that translation layer themselves.
 alongside the existing plain/`--json` output - a formatting concern only,
 the verdict computation doesn't change at all.
 
+**Worth knowing:** this is a place where inline pins (DECISIONS.md #1) give
+reflock something a lockfile-based tool can't easily match - a finding already
+carries the exact file and line of the *reference*, which is what an inline PR
+annotation needs. [drift](DECISIONS.md#prior-art-under-observation)'s GitHub
+Action is install-only and emits no annotations.
+
 ---
 
 ## 5. Symbol-level code anchors without hand-placed markers *(Medium)*
@@ -157,6 +169,16 @@ that it changes the tool's character.
 **Non-goal:** don't reimplement a language server. Definition-line resolution
 only, not call-graph or type-aware anything.
 
+**Fingerprint the AST, not the bytes.** When this lands, the unit hash for a
+resolved symbol should be a *normalized syntax tree* rather than raw text:
+node kinds plus token text, with whitespace and position stripped. Raw content
+hashing is right for prose (a reflowed paragraph is the same paragraph) but
+wrong for code, where a reformat or a rename in an adjacent line is not a
+semantic change and shouldn't flag every reference to the function. This is
+the approach [fiberplane/drift](DECISIONS.md#prior-art-under-observation)
+takes, and it composes naturally with the Rust port discussed below, where
+tree-sitter links statically.
+
 ---
 
 ## 6. Anchors into config/data files by key path *(Medium)*
@@ -176,6 +198,11 @@ files with no comment syntax (strict JSON).
 **Shape of a solution:** a small per-format key-path resolver (dotted-path
 into parsed YAML/JSON/TOML) that returns the sub-tree at that key as the
 fingerprinted unit, same contract as `unit_text` today.
+
+**Demand signal:** this is the most-requested open issue on
+[drift](DECISIONS.md#prior-art-under-observation) too - independent evidence
+that config keys are a real documentation-drift hotspot and not just a
+hypothetical one. Neither tool supports it today.
 
 ---
 
@@ -198,8 +225,14 @@ reference: (a) asks `git log --follow`/rename-similarity detection whether
 the old path became a tracked new path, and repoints the reference
 automatically if so; (b) falls back to a fuzzy filename match (basename
 similarity within the same subtree) when git history doesn't have a clean
-rename to offer (squashed history, moved outside a single commit). Anything
-neither method resolves stays `DANGLING`, unchanged from today.
+rename to offer (squashed history, moved outside a single commit); (c) for a
+*pinned* reference, the recorded fingerprint is a third signal stronger than
+either - recompute every candidate file's hash and prefer an exact content
+match over a fuzzy name match, since reflock already has the hash on hand and
+[fiberplane/drift](https://github.com/fiberplane/drift) has nothing
+equivalent (a renamed target there just reports "not found," full stop).
+Anything none of the three methods resolves stays `DANGLING`, unchanged from
+today.
 
 ---
 
@@ -242,6 +275,104 @@ per keystroke-adjacent save) - sequence it last.
 
 ---
 
+## 10. Re-blessing a `DRIFTED` reference is one flag away from a rubber stamp *(Near)*
+
+**The scenario:** the whole pitch of the Stop-hook gate (README, "Three
+gates") is that an agent can't declare itself done with references broken.
+But `stamp --rebless` has no such friction: an agent (or a human on autopilot)
+facing a red `check` can run `stamp --rebless` and go green without ever
+reading what changed. That's not a bug in the mechanism - the mechanism did
+exactly what it was asked - but it is a bug in the *gate*, because the whole
+argument for reflock existing is that a DRIFTED verdict corresponds to a real
+"someone should read this" event, and this command lets that event be
+silently discarded.
+
+**Why reflock can't do this today:** `--rebless` unconditionally accepts the
+current target state as correct and writes the new hash. There's no diff
+shown, no confirmation required, no distinction between "I read this and it's
+fine" and "I want this error to go away."
+
+**Shape of a solution:** `stamp --rebless` prints, per reference, the
+referencing line/paragraph next to the target unit's current text (a real
+before/after, not just a hash), and requires either an interactive
+accept-per-item prompt (TTY) or an explicit `--reviewed` flag (non-TTY / CI /
+agent) to actually write. Without it, exit nonzero with the diff on stderr -
+forcing an agent to either engage with the content or fail visibly, never to
+silently rubber-stamp.
+
+**Prior art:** [drift](DECISIONS.md#prior-art-under-observation) shipped exactly
+this - re-blessing refuses by default and requires an explicit
+"the doc is still accurate" flag. The single most directly copyable idea from
+watching a live competitor, and it closes a concrete hole in reflock's own
+central claim rather than adding a new capability.
+
+---
+
+## 11. The stamp format has no version tag, and it's a published wire format now *(Near, do before wide adoption)*
+
+**The scenario:** `FP_LEN` hex chars of truncated sha256 is not an
+implementation detail - it's a contract every adopting repo bakes into its
+files the moment `stamp` runs. If the hash function, truncation length, or
+normalization rule ever needs to change (a collision-margin concern, a
+mismatch discovered during the Rust port's differential testing against the
+eval bench), there is currently no way for a stamp to say "I was computed
+under the old rule." A change forces a choice between two bad options: freeze
+the algorithm forever, or force a false `DRIFTED` wave across every repo that
+adopted reflock in the meantime, the instant an update rolls out.
+
+**Why reflock can't do this today:** a stamp is bare hex - `@a1b2c3d4` - with
+no room for a version marker.
+
+**Shape of a solution:** reserve the version now, while adoption is small
+enough that this costs nothing: bare hex continues to mean "v1" (no behavior
+change, no migration needed today), and a future algorithm ships as
+`@2:newhex`; `check`/`stamp` read the prefix and dispatch to the matching
+fingerprint function. Cheap to add before stamps exist widely in the wild,
+expensive to retrofit after - this is exactly the kind of decision the
+"freeze the wire format before any port" sequencing note (below) is warning
+about, so it should land before, not during, that port.
+
+**Prior art:** [drift](DECISIONS.md#prior-art-under-observation) has only a
+coarse file-level lockfile version, no per-binding algorithm tag. The gap
+matters *more* for reflock: a lockfile can be migrated by bumping one field,
+whereas inline stamps (DECISIONS.md #1) are scattered across every referring
+file and cannot be. The cost of not reserving this is paid at exactly the
+moment adoption makes it expensive to fix.
+
+---
+
+## 12. A vendored copy of a doc carries stamps that don't belong to this repo *(Medium)*
+
+**The scenario:** a doc with its own stamps gets copied wholesale into a
+second repo - a shared onboarding guide, a vendored README, an agent skill
+file distributed the way Claude Code skills are. The copy's pins were blessed
+against the *original* repo's targets, which simply don't exist in the new
+repo. Every one of those references goes `DANGLING` on arrival, even though
+nothing is actually wrong - the doc is exactly as accurate as it was in its
+home repo.
+
+**Why reflock can't do this today:** there's no notion that a file's stamps
+were computed against a different tree than the one `check` is currently
+walking. This is a different gap from northstar #1 (a reference that *points
+across* a repo boundary, but is evaluated in the repo it lives in); here the
+whole file's origin is elsewhere.
+
+**Shape of a solution:** an optional per-file or per-reference origin marker
+(`<!-- reflock-origin: git@github.com:org/repo.git -->` near the top of a
+doc, or an `@origin` suffix on a `REF:` line) that `check` compares against
+the current repo's own `git remote get-url origin`. On a mismatch, treat the
+reference the same way reflock already treats a target outside the tree
+(`OK`, deliberately unchecked) rather than `DANGLING` - additive, and the
+common single-repo case is untouched.
+
+**Prior art:** [drift](DECISIONS.md#prior-art-under-observation) ships exactly
+this - an `origin` field per binding - specifically so its own agent skill file
+can be distributed into other repos without every binding going stale on
+arrival. Note this cost is one reflock accepted knowingly when it chose inline
+pins over a lockfile (DECISIONS.md #1); this entry is how it gets paid down.
+
+---
+
 ## Language & runtime: when Python stops being the right host *(Far, cross-cutting)*
 
 Not a capability - a constraint that sits underneath several of the entries
@@ -277,7 +408,11 @@ Ranked by how decisive each one is:
 3. **Distribution.** Already bitten once: brew install failing on
    `detected_python_shebang`. A single static binary makes that entire class of
    failure structurally impossible and simplifies bottling rather than
-   complicating it.
+   complicating it. **Constraint on any port:** Python runs on Windows today,
+   for free, and that is a live differentiator - the closest comparable tool
+   still has no Windows build (DECISIONS.md, prior art). A port that ships
+   macOS/Linux binaries and quietly drops Windows would trade a real advantage
+   for a build-matrix convenience.
 4. **#6 (config/data key-path anchors).** Python needs PyYAML, a real runtime
    dependency (`tomllib` is read-only and 3.11+). Rust compiles serde in and
    stays one binary.
