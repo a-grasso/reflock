@@ -159,11 +159,29 @@ items:
     source: IDEAS.md
     tier: near
     owner: agent
-    status: ready
+    status: needs-decision
     contract: roadmap/ID-21-pre-commit-manifest.md
     blocked_by: [NS-03]
     touches: [.pre-commit-hooks.yaml, README.md]
-    note: The advisory hook it ships needs stamp --check to exist first.
+    note: >-
+      Contract mandates `language: python, entry: reflock` for both hooks, but
+      pre-commit's `language: python` installs the hook repo as a package
+      (`pip install .` into a venv) to obtain the `reflock` console script.
+      reflock has no setup.py/pyproject.toml/entry_points anywhere in the
+      repo (D3: single stdlib file, installed by install.sh symlinking
+      reflock.py directly) and the contract's touches list restricts this
+      item to `.pre-commit-hooks.yaml` and `README.md` only, so adding
+      packaging metadata is out of scope. As written, `entry: reflock` under
+      `language: python` cannot resolve to a runnable command. Question for a
+      human: should this item (a) use `language: script` with
+      `entry: reflock.py` instead (no packaging needed, single-file
+      invocation), (b) expand scope to add minimal packaging
+      (pyproject.toml with a console_scripts entry point) so `language:
+      python` / `entry: reflock` works as literally specified, or (c) require
+      adopters to have reflock already on PATH and use `language: system`
+      with `entry: reflock`? Each has different implications for D3 and for
+      what "no additional dependencies" means for pre-commit's own venv
+      bootstrapping.
 
   # --- done ------------------------------------------------------------------
   - id: BUG-01
