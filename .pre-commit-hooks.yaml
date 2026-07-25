@@ -1,0 +1,32 @@
+# reflock hooks for the pre-commit framework.
+#
+# Both hooks default to the pre-push stage, not pre-commit. A pre-commit gate
+# fires on partial work: a reference added in this commit whose target arrives
+# in the next one is correctly DANGLING, and blocking that commit is friction a
+# human is right to resent. pre-commit has no warn-only mode - a failing hook
+# blocks whatever stage it runs in - so pre-push is how these stay advisory
+# about work in progress while still refusing to let a broken reference leave
+# your machine. Override with `stages: [pre-commit]` if you want it earlier.
+#
+# Both run over the whole tree (pass_filenames: false): a per-file invocation
+# cannot see cross-file targets and would report references as DANGLING purely
+# because the file defining the target was not passed in.
+
+- id: reflock-check
+  name: reflock check
+  description: fail if any pinned cross-reference is broken or has drifted
+  entry: reflock.py check
+  language: script
+  pass_filenames: false
+  files: \.(md|markdown|txt|rst|py|sh|bash|zsh|fish|ya?ml|toml|json|rs|go|c|h|cpp|hpp|java|kt|rb|js|jsx|ts|tsx)$
+  stages: [pre-push]
+
+- id: reflock-stamp-check
+  name: reflock stamp --check
+  description: report pins that stamp would add or rewrite, without writing
+  entry: reflock.py stamp --check
+  language: script
+  pass_filenames: false
+  files: \.(md|markdown|txt|rst|py|sh|bash|zsh|fish|ya?ml|toml|json|rs|go|c|h|cpp|hpp|java|kt|rb|js|jsx|ts|tsx)$
+  stages: [pre-push]
+  verbose: true

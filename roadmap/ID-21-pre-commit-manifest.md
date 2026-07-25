@@ -25,7 +25,20 @@ and point at pre-push for enforcement.
 
 Manifest specifics:
 
-- `language: python`, `entry: reflock`, no additional dependencies (D3).
+- `language: script`, `entry: reflock.py`, no additional dependencies (D3).
+
+  Amended after an agent raised this as `needs-decision`. The original text said
+  `language: python` / `entry: reflock`, which cannot work: pre-commit's
+  `language: python` installs the hook repo as a package (`pip install .` into a
+  venv) to obtain a `reflock` console script, and reflock ships no
+  `pyproject.toml` or entry_points anywhere - D3 makes it a single stdlib file
+  that `install.sh` symlinks. `language: script` runs the executable directly, so
+  no packaging is needed and adopters need nothing on `PATH`.
+- `stages: [pre-push]` on both hooks. pre-commit has no warn-only mode - a
+  failing hook blocks whatever stage it runs in - so defaulting to pre-push is
+  the only way to satisfy D6's "do not ship a hook that hard-fails a commit by
+  default" while still shipping a hook that enforces. The README documents the
+  `stages: [pre-commit]` override.
 - `files:` restricted to text types reflock actually parses, so the hook does not
   fire on every binary asset.
 - `pass_filenames` - decide deliberately and state why in the PR. reflock's

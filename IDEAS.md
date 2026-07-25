@@ -107,12 +107,6 @@ than by priority tier.
     `a-grasso/reflock-action@v1` as a real composite/Docker action turns
     adoption into one line in a workflow instead of "read the README and
     hand-write the steps" — matches how every other linter ships today.
-21. **A `pre-commit` framework manifest (`.pre-commit-hooks.yaml`).** Most
-    teams already run `black`/`ruff`/`mypy` through the `pre-commit` tool's
-    `repos:` list, not hand-rolled `.git/hooks/pre-commit` scripts. Shipping
-    the manifest lets reflock slot into that existing convention instead of
-    asking every adopter to reinvent the hook-install step the README
-    currently documents manually.
 22. **A minimal VS Code extension ahead of full LSP.** Run
     `reflock check --json` on save, render results via VS Code's Diagnostics
     API. Much smaller than the full LSP in NORTHSTARS ([#9](NORTHSTARS.md))
