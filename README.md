@@ -80,6 +80,22 @@ The pipeline runs four stages — see [ADR-0011](../adr/0011-….md#decision).
 Then `reflock check` resolves every one and reports `DANGLING` on any miss.
 `reflock suspects` helps you *find* the prose that should have been links.
 
+Markdown's reference-style form is also understood - `[the loader][loader-ref]`
+with a `[loader-ref]: doc/adr/0013.md#loader` definition elsewhere in the file:
+
+```markdown
+The tokenizer feeds [the loader][loader-ref] directly.
+
+[loader-ref]: doc/adr/0013.md#loader
+```
+
+A definition names its target exactly once even when many usages point at it,
+so the pin lives on the **definition** line, not on any usage - `reflock stamp`
+never touches a usage line. The collapsed form (`[loader-ref][]`) resolves the
+same way. The shortcut form - a lone `[loader-ref]` with no second bracket
+pair - is **not** supported: it is indistinguishable from ordinary bracketed
+prose.
+
 ### Level 2 — pin load-bearing references with a fingerprint
 
 Where B makes a *claim* about A's content (not just "see also"), pin it. Two

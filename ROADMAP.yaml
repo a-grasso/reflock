@@ -65,7 +65,7 @@ items:
     source: NORTHSTARS.md#2-markdown-link-forms-beyond-texttarget-near
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/NS-02a-reference-style-links.md
     blocked_by: []
     touches: [reflock.py]

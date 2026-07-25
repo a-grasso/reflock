@@ -1,0 +1,11 @@
+{
+  "description": "The collapsed reference-style usage `[id][]` resolves via its definition line, which is the only thing parsed.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
