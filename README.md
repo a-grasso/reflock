@@ -286,6 +286,38 @@ would be a no-op.
 reflock stamp --check || echo "Some pins are stale; run 'reflock stamp'."
 ```
 
+If your team already runs the [`pre-commit`](https://pre-commit.com) framework,
+reflock ships a `.pre-commit-hooks.yaml`, so you don't hand-roll either script:
+
+```yaml
+repos:
+  - repo: https://github.com/a-grasso/reflock
+    rev: v0.1.0
+    hooks:
+      - id: reflock-check
+      - id: reflock-stamp-check
+```
+
+Both hooks default to the **pre-push** stage rather than pre-commit, for the
+partial-work reason above: a reference whose target lands in the *next* commit
+is correctly `DANGLING`, and blocking that commit is friction you're right to
+resent. `pre-commit` has no warn-only mode - a failing hook blocks whatever
+stage it runs in - so pre-push is how `reflock-stamp-check` stays advisory about
+work in progress while still refusing to let a broken reference leave your
+machine. Install the stage once with `pre-commit install --hook-type pre-push`.
+
+If you'd rather have the feedback at commit time and accept the friction,
+override the stage per hook:
+
+```yaml
+      - id: reflock-check
+        stages: [pre-commit]
+```
+
+Both run over the whole tree, not the changed files: a per-file invocation
+can't see cross-file targets and would report references as `DANGLING` purely
+because the file defining the target wasn't passed in.
+
 **2. CI (the server backstop).** One job step: `reflock check`. Nonzero exit fails
 the build. Deterministic, cacheable, no secrets.
 

@@ -1048,5 +1048,107 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(self.read("a.md"), before)
 
 
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+MANIFEST = os.path.join(REPO_ROOT, ".pre-commit-hooks.yaml")
+
+
+def parse_hook_manifest(text: str) -> list[dict[str, str]]:
+    """Minimal parser for the one shape .pre-commit-hooks.yaml has: a top-level
+    list of flat string-valued mappings. Stdlib only, per D3 - pulling in PyYAML
+    to test a 20-line manifest would be the dependency this project refuses."""
+    hooks: list[dict[str, str]] = []
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
+        if not line.strip():
+            continue
+        stripped = line.lstrip()
+        if stripped.startswith("- "):
+            hooks.append({})
+            stripped = stripped[2:]
+        if ":" not in stripped:
+            raise AssertionError(f"not a key: value line: {raw!r}")
+        if not hooks:
+            raise AssertionError(f"mapping outside any list item: {raw!r}")
+        key, _, value = stripped.partition(":")
+        hooks[-1][key.strip()] = value.strip().strip("'\"")
+    return hooks
+
+
+class PreCommitManifestTest(unittest.TestCase):
+    """ID-21: the shipped manifest must parse and must not name a subcommand or
+    an entry script that has been renamed out from under it - a silent failure
+    mode no other test covers."""
+
+    def setUp(self):
+        with open(MANIFEST, encoding="utf-8") as fh:
+            self.hooks = parse_hook_manifest(fh.read())
+
+    def test_manifest_exists_and_parses(self):
+        self.assertTrue(self.hooks, "manifest declares no hooks")
+
+    def test_required_keys_present(self):
+        for hook in self.hooks:
+            for key in ("id", "name", "entry", "language"):
+                self.assertIn(key, hook, f"hook {hook.get('id', '?')} missing {key}")
+
+    def test_declares_both_documented_hook_ids(self):
+        self.assertEqual(
+            sorted(h["id"] for h in self.hooks),
+            ["reflock-check", "reflock-stamp-check"],
+        )
+
+    def test_entry_invokes_an_existing_subcommand(self):
+        spec = reflock.parser_spec()
+        for hook in self.hooks:
+            parts = hook["entry"].split()
+            self.assertGreaterEqual(len(parts), 2, f"entry {hook['entry']!r} names no subcommand")
+            self.assertIn(parts[1], spec,
+                          f"hook {hook['id']} invokes unknown subcommand {parts[1]!r}")
+
+    def test_entry_script_exists_and_is_executable(self):
+        for hook in self.hooks:
+            script = os.path.join(REPO_ROOT, hook["entry"].split()[0])
+            self.assertTrue(os.path.exists(script), f"{script} does not exist")
+            self.assertTrue(os.access(script, os.X_OK),
+                            f"{script} is not executable, so language: script cannot run it")
+
+    def test_entry_flags_exist_on_that_subcommand(self):
+        spec = reflock.parser_spec()
+        for hook in self.hooks:
+            parts = hook["entry"].split()
+            for flag in (p for p in parts[2:] if p.startswith("-")):
+                self.assertIn(flag, spec[parts[1]],
+                              f"hook {hook['id']} passes {flag!r}, absent from {parts[1]}")
+
+    def test_no_hook_blocks_a_commit_by_default(self):
+        """D6: do not ship a hook that hard-fails a commit by default. pre-commit
+        has no warn-only mode - a failing hook always blocks the stage it runs in
+        - so the only way to honor D6 is to default both hooks to pre-push."""
+        for hook in self.hooks:
+            self.assertIn("stages", hook, f"hook {hook['id']} does not pin a stage")
+            self.assertNotIn("pre-commit", hook["stages"],
+                             f"hook {hook['id']} would block commits on partial work")
+            self.assertIn("pre-push", hook["stages"])
+
+    def test_advisory_hook_shows_its_output(self):
+        hook = next(h for h in self.hooks if h["id"] == "reflock-stamp-check")
+        self.assertEqual(hook.get("verbose"), "true")
+
+    def test_hooks_are_scoped_to_parseable_files(self):
+        """Contract: files: restricted to text types reflock parses, so the hook
+        does not fire on every binary asset."""
+        for hook in self.hooks:
+            self.assertIn("files", hook, f"hook {hook['id']} has no files: filter")
+            self.assertNotIn("always_run", hook,
+                             f"hook {hook['id']} sets always_run, defeating files:")
+
+    def test_no_hook_passes_filenames(self):
+        """A per-file invocation cannot see cross-file targets, so it would
+        report false DANGLING findings."""
+        for hook in self.hooks:
+            self.assertEqual(hook.get("pass_filenames"), "false",
+                             f"hook {hook['id']} must run over the whole tree")
+
+
 if __name__ == "__main__":
     unittest.main()
