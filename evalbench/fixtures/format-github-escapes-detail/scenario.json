@@ -1,0 +1,13 @@
+{
+  "description": "a target containing %, : and , produces a well-formed GitHub annotation with the file= property escaped",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--format", "github"],
+      "expect_exit": 1,
+      "expect_contains": [
+        "::error file=a.md,line=1,title=DANGLING::no such file: weird%25file,name.md"
+      ]
+    }
+  ]
+}

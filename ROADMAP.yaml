@@ -149,7 +149,7 @@ items:
     source: NORTHSTARS.md#4-ci-native-output-inline-annotations-not-just-a-log-block-near
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/NS-04-github-format.md
     blocked_by: [FMT-01, ID-13]
     touches: [reflock.py]
