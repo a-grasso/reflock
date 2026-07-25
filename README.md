@@ -184,6 +184,11 @@ where a stale reference could escape:
 ```bash
 reflock check || { echo "Fix references before committing."; exit 1; }
 ```
+Note this gate fires on partial work: a reference whose target lands in the
+*next* commit is correctly `DANGLING` and will block a commit you consider
+reasonable. Gate at pre-push instead if that friction outweighs catching
+mistakes early - see
+[what each gate can honestly promise](DECISIONS.md#3-where-to-gate-and-what-each-gate-can-honestly-promise)<!--@c770f4c8-->.
 
 **2. CI (the server backstop).** One job step: `reflock check`. Nonzero exit fails
 the build. Deterministic, cacheable, no secrets.
@@ -244,9 +249,17 @@ for the "who points at me" instinct. The new bit is aiming all of that at a mixe
 docs+code tree with a grammar simple enough to grep and a fingerprint scoped
 tightly enough to stay quiet.
 
+The nearest *living* neighbour is [fiberplane/drift](https://github.com/fiberplane/drift),
+which independently arrived at the same thesis and reached several opposite
+conclusions worth understanding - notably a central lockfile where reflock puts
+pins inline. [DECISIONS.md](DECISIONS.md) records what reflock chose, what it
+rejected, and the evidence, including what drift tried and abandoned.
+
 ## Not yet supported
 
 See [NORTHSTARS.md](NORTHSTARS.md) for the full, prioritized list of
 capabilities reflock doesn't have yet, the real-world scenario forcing each
 one, and the rough shape of a fix. [IDEAS.md](IDEAS.md) is the wider, less
-prioritized brainstorm those northstars are drawn from.
+prioritized brainstorm those northstars are drawn from. Some absences are
+deliberate rather than pending - [DECISIONS.md](DECISIONS.md) says which, and
+why.
