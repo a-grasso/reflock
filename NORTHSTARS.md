@@ -239,3 +239,80 @@ process, no file-watch, and no editor protocol implementation.
 index warm between saves. This is the single biggest lift on this list and
 depends on #8 (a watch-mode daemon needs the incremental index to stay cheap
 per keystroke-adjacent save) - sequence it last.
+
+---
+
+## Language & runtime: when Python stops being the right host *(Far, cross-cutting)*
+
+Not a capability - a constraint that sits underneath several of the entries
+above. reflock today is 465 lines of stdlib-only Python in a single file, and
+that legibility is part of the product argument: you can read the whole tool
+in one sitting and satisfy yourself that there is no model in the hot path.
+Trading it away needs a reason, and several of the northstars above are that
+reason.
+
+**Measured baseline (117 tracked files, this repo):** `reflock check` takes
+~0.07s user + 0.04s sys but ~0.5s wall. Python interpreter startup is ~0.017s.
+The tool is blocked on `git ls-files` and `git check-ignore` subprocesses, not
+on Python. Today's latency is a design problem, not a language problem, and a
+naive port that still shells out to git would be no faster. Fix the subprocess
+round-trips first; they are cheap and need no rewrite.
+
+### What actually forces a compiled language
+
+Ranked by how decisive each one is:
+
+1. **#5 (tree-sitter symbol anchors) - decisive.** Rust is tree-sitter's native
+   home: grammars link statically at compile time, no cgo, no dynamic `.so`
+   loading. In Python this means `py-tree-sitter` plus a per-language wheel
+   matrix, which destroys the zero-dependency story that makes reflock cheap to
+   trust. In Go it means cgo, which destroys the single-static-binary story.
+2. **#8 (incremental indexing at scale).** The ripgrep crate lineage maps 1:1
+   onto what reflock does: `ignore` for gitignore-aware walking (which deletes
+   both git subprocesses *and* the hand-rolled `.reflockignore` `fnmatch` path,
+   the same neighbourhood that produced the slugify/ignore class of bugs),
+   plus `globset`, `memchr`, and `rayon` for parallel read-hash-parse. Python
+   has a GIL, and multiprocessing overhead eats the gain at the file counts
+   where the gain would matter.
+3. **Distribution.** Already bitten once: brew install failing on
+   `detected_python_shebang`. A single static binary makes that entire class of
+   failure structurally impossible and simplifies bottling rather than
+   complicating it.
+4. **#6 (config/data key-path anchors).** Python needs PyYAML, a real runtime
+   dependency (`tomllib` is read-only and 3.11+). Rust compiles serde in and
+   stays one binary.
+5. **#9 (LSP).** `tower-lsp` is mature; a long-lived Python daemon is the
+   heaviest of the options. Depends on #8 anyway, so it sequences last
+   regardless.
+
+**Rust over Go:** Go is a perfectly good fit on its own terms - fast compiles,
+easy contribution, static binaries - but Rust wins the two decisions that
+actually matter for *this* roadmap: tree-sitter without cgo, and the ripgrep
+crates. Pick Go only if contributor accessibility comes to outrank roadmap fit.
+
+**Not a solution, but a cheap escape hatch:** if *only* distribution is
+hurting, `pyapp`/PyOxidizer ships today's Python as a single binary for near-
+zero effort. It fixes the shebang/interpreter class of bug and buys nothing on
+scale, tree-sitter, or LSP. A stopgap, not the answer.
+
+### Concrete sequencing
+
+1. **Stay in Python and finish the near work.** #2 (link grammars), #3
+   (`stamp --check`), #4 (CI-native output) are grammar and formatting changes
+   with zero language leverage - Python is the cheapest possible host for them,
+   and they are what settles the semantics. Porting before the semantics settle
+   means porting twice.
+2. **Separately, kill the subprocess wall time.** One git invocation instead of
+   two, or walk the tree directly. No rewrite required.
+3. **Freeze the wire format before any port.** `normalize()` plus truncated
+   sha256 is a *published format*: every stamp in every adopting repo turns
+   `DRIFTED` if a reimplementation differs by one byte. Write the
+   normalization rules down as a spec with golden fingerprint vectors, and make
+   those vectors the port's hardest test.
+4. **Port on a trigger, not a date.** Any one of: committing to #5, #6, or #9;
+   `check` no longer feeling instant on a real repo *after* step 2; or
+   distribution biting again.
+5. **Port differentially.** The eval bench is already a language-neutral
+   conformance suite - that is exactly the precondition a rewrite wants. Keep
+   the CLI surface and the stamp bytes identical, and run both implementations
+   against the bench throughout the transition.
