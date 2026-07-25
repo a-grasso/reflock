@@ -89,8 +89,12 @@ code.py:   # REF: t.md    -> still a reference
 ## Verification
 
 ```
-make test && make bench && make check && make suspects
+make gate
 ```
+
+`suspects` is advisory and exits nonzero whenever it has
+anything to say, so it is not part of the gate. Read its output, act on
+anything real, but do not chain it.
 
 Expect `make check` findings to *decrease* or hold, never increase. This item
 makes reflock see less, deliberately.
