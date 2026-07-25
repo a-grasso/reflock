@@ -233,6 +233,33 @@ def build_index(root: str) -> Index:
     return idx
 
 
+def mask_code_spans(line: str) -> str:
+    """Blank out inline backtick spans, same-length, so offsets are unaffected.
+
+    A markdown renderer treats span content as literal text, so it must not be
+    parsed for references - the same reasoning already applied to fenced
+    blocks. An unterminated backtick has no matching close and is left as-is,
+    so it cannot silence the rest of the line.
+    """
+    out = []
+    i, n = 0, len(line)
+    while i < n:
+        if line[i] == "`":
+            j = i
+            while j < n and line[j] == "`":
+                j += 1
+            ticks = j - i
+            close = line.find("`" * ticks, j)
+            if close != -1:
+                end = close + ticks
+                out.append("\0" * (end - i))
+                i = end
+                continue
+        out.append(line[i])
+        i += 1
+    return "".join(out)
+
+
 def parse_refs(idx: Index, rel: str) -> list[Ref]:
     refs: list[Ref] = []
     is_md = rel.endswith((".md", ".markdown"))
@@ -243,10 +270,13 @@ def parse_refs(idx: Index, rel: str) -> list[Ref]:
             continue
         if in_fence:  # illustrative refs in fenced code aren't real references
             continue
+        # Inline code spans are exempt on the same basis as fenced blocks;
+        # masking (not stripping) keeps every other match's column correct.
+        scan = mask_code_spans(ln) if is_md else ln
         patterns = [(MD_REF, "md")] if is_md else []
         patterns.append((CODE_REF, "code"))
         for pat, kind in patterns:
-            for m in pat.finditer(ln):
+            for m in pat.finditer(scan):
                 pin = m.group("pin")
                 span = m.span("pin") if pin is not None else None
                 refs.append(Ref(rel, i + 1, kind, m.group("target"), pin, span))

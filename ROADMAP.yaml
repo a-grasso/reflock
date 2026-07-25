@@ -38,7 +38,7 @@ items:
     source: IDEAS.md
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/BUG-02-inline-code-spans.md
     blocked_by: []
     touches: [reflock.py]

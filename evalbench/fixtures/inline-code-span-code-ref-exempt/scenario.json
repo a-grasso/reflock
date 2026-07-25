@@ -1,0 +1,11 @@
+{
+  "description": "A REF comment shown inside a code span in prose is documentation about the syntax, not a live reference.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
