@@ -1,0 +1,14 @@
+{
+  "description": "check -q on a clean tree exits 0 and prints nothing to stdout.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["-q"],
+      "expect_exit": 0,
+      "expect_not_contains": [
+        "OK",
+        "problem"
+      ]
+    }
+  ]
+}

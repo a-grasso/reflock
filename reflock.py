@@ -463,13 +463,22 @@ def cmd_check(idx: Index, args) -> int:
     except FormatConflict as e:
         print(e, file=sys.stderr)
         return 2
+    if args.quiet and args.verbose:
+        print("error: --quiet conflicts with --verbose", file=sys.stderr)
+        return 2
     results = []
+    total = 0
     for rel in scoped_files(idx, args.paths):
         for ref in parse_refs(idx, rel):
             verdict, detail = classify(idx, ref)
+            total += 1
             if verdict != "OK" or args.verbose:
                 results.append((verdict, ref, detail))
     problems = sum(1 for v, _, _ in results if v in BAD)
+    if args.quiet and fmt == "human":
+        if problems:
+            print(f"reflock: {problems} of {total} references failed", file=sys.stderr)
+        return 1 if problems else 0
     return RENDERERS[fmt](results, problems, args)
 
 
@@ -582,6 +591,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--format", choices=sorted(RENDERERS), default=None,
                    help="output format (default: human); --json is an alias for --format json")
     c.add_argument("--verbose", "-v", action="store_true", help="also list OK refs")
+    c.add_argument("--quiet", "-q", action="store_true",
+                   help="print nothing on success; one summary line to stderr on failure")
     c.add_argument("--no-color", action="store_true", help="disable colored output")
     c.set_defaults(fn=cmd_check)
     s = sub.add_parser("stamp", help="fill / update fingerprints")
