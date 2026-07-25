@@ -441,11 +441,17 @@ def cmd_check(idx: Index, args) -> int:
     return RENDERERS[fmt](results, problems, args)
 
 
-def cmd_stamp(idx: Index, args) -> int:
-    changed = 0
+def plan_stamp(idx: Index, args):
+    """Compute the edits `stamp` would make, without writing anything.
+
+    Returns (edits_by_rel, report): edits_by_rel maps rel -> {lineno: [(s, e,
+    fp), ...]} for writing; report is an ordered list of (rel, ref, kind, fp)
+    for display, where kind is "unstamped" or "stale". Shared by cmd_stamp's
+    write path and its --check path so the two cannot diverge.
+    """
+    edits_by_rel: dict[str, dict[int, list[tuple[int, int, str]]]] = {}
+    report = []
     for rel in scoped_files(idx, args.paths):
-        lines = idx.lines[rel]
-        edits: dict[int, list[tuple[int, int, str]]] = {}
         for ref in parse_refs(idx, rel):
             if ref.pin is None:
                 continue                       # not opted in
@@ -459,9 +465,25 @@ def cmd_stamp(idx: Index, args) -> int:
             unit = unit_text(idx, path, (ref.target[1:] if ref.target.startswith("#") else anchor) or None)
             fp = fingerprint(unit)
             if fp != ref.pin:
-                edits.setdefault(ref.line - 1, []).append((*ref.pin_span, fp))
-        if not edits:
-            continue
+                kind = "unstamped" if ref.pin == "" else "stale"
+                edits_by_rel.setdefault(rel, {}).setdefault(ref.line - 1, []).append((*ref.pin_span, fp))
+                report.append((rel, ref, kind, fp))
+    return edits_by_rel, report
+
+
+def cmd_stamp(idx: Index, args) -> int:
+    edits_by_rel, report = plan_stamp(idx, args)
+    if getattr(args, "check", False):
+        for rel, ref, kind, fp in report:
+            print(f"  {rel}:{ref.line}  {ref.target}   [{kind}]")
+        if report:
+            print(f"\n{len(report)} pin(s) would be stamped.")
+            return 1
+        print("\nNothing to stamp.")
+        return 0
+    changed = 0
+    for rel, edits in edits_by_rel.items():
+        lines = idx.lines[rel]
         for lineno, splices in edits.items():
             ln = lines[lineno]
             for s, e, fp in sorted(splices, reverse=True):
@@ -528,6 +550,8 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("stamp", help="fill / update fingerprints")
     s.add_argument("paths", nargs="*")
     s.add_argument("--rebless", action="store_true", help="re-hash existing pins too")
+    s.add_argument("--check", action="store_true",
+                   help="report what stamp would do; write nothing")
     s.set_defaults(fn=cmd_stamp)
     sp = sub.add_parser("suspects", help="bare path-shaped tokens that don't resolve")
     sp.add_argument("paths", nargs="*")

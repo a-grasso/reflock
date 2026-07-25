@@ -360,6 +360,75 @@ class ReflockTest(unittest.TestCase):
         self.stamp()  # no --rebless
         self.assertEqual(self.verdict("a.md"), "DRIFTED")  # unchanged, still drifted
 
+    def test_stamp_check_clean_tree_exits_zero(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "stamp", "--check"])
+        self.assertEqual(rc, 0)
+
+    def test_stamp_check_unstamped_exits_nonzero_and_named(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "stamp", "--check"])
+        self.assertEqual(rc, 1)
+        self.assertIn("a.md:1", buf.getvalue())
+        self.assertIn("t.md#decision", buf.getvalue())
+
+    def test_stamp_check_stale_pin_exits_nonzero(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose Y instead.\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "stamp", "--check", "--rebless"])
+        self.assertEqual(rc, 1)
+        self.assertIn("a.md:1", buf.getvalue())
+
+    def test_stamp_check_writes_nothing(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        before_a = os.stat(os.path.join(self.d, "a.md"))
+        before_t = os.stat(os.path.join(self.d, "t.md"))
+        before_a_bytes, before_t_bytes = self.read("a.md"), self.read("t.md")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "stamp", "--check"])
+        after_a = os.stat(os.path.join(self.d, "a.md"))
+        after_t = os.stat(os.path.join(self.d, "t.md"))
+        self.assertEqual(before_a.st_mtime, after_a.st_mtime)
+        self.assertEqual(before_t.st_mtime, after_t.st_mtime)
+        self.assertEqual(before_a_bytes, self.read("a.md"))
+        self.assertEqual(before_t_bytes, self.read("t.md"))
+        self.stamp()
+        self.assertRegex(self.read("a.md"), r"<!--@[0-9a-f]{8}-->")
+
+    def test_stamp_check_reported_set_equals_stamp_writes(self):
+        self.write("t.md", "# H\n\n## A\n\nalpha\n\n## B\n\nbeta\n")
+        self.write("a.md", "See [a](t.md#a)<!--@-->. See [b](t.md#b)<!--@-->.\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "stamp", "--check"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(buf.getvalue().count("a.md:1"), 2)
+        self.stamp()
+        self.assertEqual(self.read("a.md").count("<!--@"), 2)
+        self.assertNotIn("<!--@-->", self.read("a.md"))
+
+    def test_stamp_check_then_stamp_is_clean(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "stamp", "--check"])
+        self.assertEqual(rc, 0)
+
     def test_unpinned_code_ref_has_no_pin(self):
         self.write("t.md", "# H\n\n## Sec\n\nbody\n")
         self.write("caller.py", "# REF: t.md#sec\n")
