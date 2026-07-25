@@ -580,7 +580,10 @@ def cmd_suspects(idx: Index, args) -> int:
     return 1 if hits else 0
 
 
-def main(argv: list[str] | None = None) -> int:
+COMPLETION_SHELLS = ("bash", "zsh", "fish")
+
+
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="reflock", description="a lockfile for cross-references")
     ap.add_argument("--version", action="version", version=f"reflock {__version__}")
     ap.add_argument("--root", default=".", help="tree root (default: git toplevel)")
@@ -606,7 +609,130 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--all", action="store_true", help="scan every file, not just markdown")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_suspects)
+    comp = sub.add_parser("completion", help="print a shell completion script")
+    comp.add_argument("shell", choices=COMPLETION_SHELLS)
+    comp.set_defaults(fn=cmd_completion, needs_index=False)
+    return ap
+
+
+def parser_spec() -> dict[str, list[str]]:
+    """subcommand name -> sorted long/short flags, walked off the live parser.
+
+    Used both to generate the completion scripts and, in tests, to assert they
+    stay in parity with the parser - so a new subcommand or flag can't go
+    stale in the shipped scripts without a test failing.
+    """
+    ap = build_parser()
+    sub_action = next(a for a in ap._subparsers._group_actions
+                       if isinstance(a, argparse._SubParsersAction))
+    spec = {}
+    for name, subparser in sub_action.choices.items():
+        flags = sorted({opt for action in subparser._actions
+                         for opt in action.option_strings if opt != "-h" and opt != "--help"})
+        spec[name] = flags
+    return spec
+
+
+def completion_script(shell: str) -> str:
+    spec = parser_spec()
+    subs = sorted(spec)
+    if shell == "bash":
+        lines = [
+            "# reflock bash completion",
+            "# Install: reflock completion bash > /etc/bash_completion.d/reflock",
+            "_reflock_completion() {",
+            "    local cur prev words cword",
+            "    if type -t _init_completion >/dev/null 2>&1; then",
+            "        _init_completion || return",
+            "    else",
+            '        cur="${COMP_WORDS[COMP_CWORD]}"',
+            "        words=(\"${COMP_WORDS[@]}\")",
+            "        cword=$COMP_CWORD",
+            "    fi",
+            f'    local subcommands="{" ".join(subs)}"',
+            "    if [[ ${cword} -eq 1 ]]; then",
+            '        COMPREPLY=( $(compgen -W "${subcommands}" -- "$cur") )',
+            "        return",
+            '    fi',
+            '    case "${words[1]}" in',
+        ]
+        for name in subs:
+            flags = " ".join(spec[name])
+            lines.append(f'        {name}) COMPREPLY=( $(compgen -W "{flags}" -- "$cur") ) ;;')
+        lines += [
+            "    esac",
+            '    if [[ "$cur" != -* ]]; then',
+            "        if type -t _filedir >/dev/null 2>&1; then",
+            "            _filedir",
+            "        else",
+            '            COMPREPLY+=( $(compgen -f -- "$cur") )',
+            "        fi",
+            "    fi",
+            "}",
+            "complete -F _reflock_completion reflock",
+            "",
+        ]
+        return "\n".join(lines)
+    if shell == "zsh":
+        lines = [
+            "#compdef reflock",
+            "# reflock zsh completion",
+            "# Install: reflock completion zsh > ~/.zsh/completions/_reflock",
+            "_reflock() {",
+            "    local -a subcommands",
+            "    subcommands=(",
+        ]
+        for name in subs:
+            lines.append(f'        "{name}"')
+        lines += [
+            "    )",
+            "    if (( CURRENT == 2 )); then",
+            '        _describe "command" subcommands',
+            "        return",
+            "    fi",
+            '    case "${words[2]}" in',
+        ]
+        for name in subs:
+            flags = " ".join(f'"{f}"' for f in spec[name])
+            lines.append(f"        {name}) _arguments {flags} '*:file:_files' ;;")
+        lines += [
+            "    esac",
+            "}",
+            "_reflock",
+            "",
+        ]
+        return "\n".join(lines)
+    if shell == "fish":
+        lines = [
+            "# reflock fish completion",
+            "# Install: reflock completion fish > ~/.config/fish/completions/reflock.fish",
+            f'complete -c reflock -n "__fish_use_subcommand" -a "{" ".join(subs)}"',
+        ]
+        for name in subs:
+            for flag in spec[name]:
+                opt = "-l " + flag[2:] if flag.startswith("--") else "-s " + flag[1:]
+                lines.append(
+                    f'complete -c reflock -n "__fish_seen_subcommand_from {name}" '
+                    f'{opt}  # {flag}'
+                )
+            lines.append(
+                f'complete -c reflock -n "__fish_seen_subcommand_from {name}" -a "(__fish_complete_path)"'
+            )
+        lines.append("")
+        return "\n".join(lines)
+    raise ValueError(f"unsupported shell: {shell!r}")
+
+
+def cmd_completion(args) -> int:
+    print(completion_script(args.shell))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = build_parser()
     args = ap.parse_args(argv)
+    if getattr(args, "needs_index", True) is False:
+        return args.fn(args)
     root = repo_root(args.root)
     return args.fn(build_index(root), args)
 

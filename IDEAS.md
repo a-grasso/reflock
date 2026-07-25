@@ -67,9 +67,6 @@ than by priority tier.
     about a single reference — resolved target, anchor, current vs. pinned
     fingerprint, the actual unit text on both sides — instead of making
     someone reconstruct that by hand from a `check` line and a manual diff.
-11. **Shell completion.** `argparse` can generate bash/zsh/fish completions
-    almost for free; near-zero cost, standard expectation for any CLI a
-    developer runs daily.
 12. **A config file (`reflock.toml` / `.reflock.yml`).** `--root`, ignore
     patterns, default output format, and future per-path pin policy currently
     have to be repeated as flags in every hook and every CI step. One file,
