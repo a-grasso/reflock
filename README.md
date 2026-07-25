@@ -164,6 +164,11 @@ reflock suspects --all # bare path-shaped tokens that resolve to nothing
 `--no-color` or set `NO_COLOR` (https://no-color.org) to turn that off, or pipe
 output anywhere and it's plain text automatically.
 
+`check --format <human|json>` selects the output format; `human` is the
+default. `--json` is a retained alias for `--format json`. Passing both is
+fine as long as they agree; passing `--json` with a conflicting `--format`
+exits nonzero with an error naming both flags.
+
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
 source of truth reflock exists to keep A and B from silently disagreeing about.

@@ -348,6 +348,55 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertEqual([f["verdict"] for f in findings], ["OK", "DANGLING"])
 
+    # --- --format --------------------------------------------------------
+    def run_check(self, *args):
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "check", *args])
+        return rc, buf.getvalue() + err.getvalue()
+
+    def test_format_human_matches_default(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc_default, out_default = self.run_check()
+        rc_fmt, out_fmt = self.run_check("--format", "human")
+        self.assertEqual(rc_default, rc_fmt)
+        self.assertEqual(out_default, out_fmt)
+
+    def test_format_human_matches_default_clean_tree(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        rc_default, out_default = self.run_check()
+        rc_fmt, out_fmt = self.run_check("--format", "human")
+        self.assertEqual(rc_default, rc_fmt)
+        self.assertEqual(out_default, out_fmt)
+
+    def test_format_json_matches_json_flag(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc_json, out_json = self.run_check("--json")
+        rc_fmt, out_fmt = self.run_check("--format", "json")
+        self.assertEqual(rc_json, rc_fmt)
+        self.assertEqual(out_json, out_fmt)
+
+    def test_json_and_format_json_agree(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, out = self.run_check("--json", "--format", "json")
+        self.assertEqual(rc, 1)
+        json.loads(out)  # still valid JSON output
+
+    def test_json_and_format_human_conflict(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, out = self.run_check("--json", "--format", "human")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("--json", out)
+        self.assertIn("--format", out)
+
+    def test_invalid_format_value_rejected(self):
+        buf_out, buf_err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err), \
+             self.assertRaises(SystemExit) as cm:
+            reflock.main(["--root", self.d, "check", "--format", "xml"])
+        self.assertNotEqual(cm.exception.code, 0)
+        self.assertIn("invalid choice", buf_err.getvalue())
+
     def test_scoped_check_limits_to_path_arg(self):
         # path args are resolved relative to the process CWD (like git/find), not --root
         self.write("docs/a.md", "See [x](missing.md).\n")

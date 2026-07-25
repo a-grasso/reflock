@@ -377,18 +377,13 @@ def scoped_files(idx: Index, paths: list[str]) -> list[str]:
                   and (f in want or any(f.startswith(w + "/") for w in want)))
 
 
-def cmd_check(idx: Index, args) -> int:
-    results = []
-    for rel in scoped_files(idx, args.paths):
-        for ref in parse_refs(idx, rel):
-            verdict, detail = classify(idx, ref)
-            if verdict != "OK" or args.verbose:
-                results.append((verdict, ref, detail))
-    problems = sum(1 for v, _, _ in results if v in BAD)
-    if args.json:
-        print(json.dumps([{"verdict": v, "file": r.src, "line": r.line,
-                           "target": r.target, "detail": d} for v, r, d in results], indent=2))
-        return 1 if problems else 0
+def render_json(results, problems: int, args) -> int:
+    print(json.dumps([{"verdict": v, "file": r.src, "line": r.line,
+                       "target": r.target, "detail": d} for v, r, d in results], indent=2))
+    return 1 if problems else 0
+
+
+def render_human(results, problems: int, args) -> int:
     color = use_color(args)
     for v in ("DANGLING", "DRIFTED", "UNSTAMPED", "OK"):
         group = [(r, d) for vv, r, d in results if vv == v]
@@ -400,6 +395,42 @@ def cmd_check(idx: Index, args) -> int:
     msg = f"{problems} problem(s)." if problems else "All references OK."
     print(f"\n{colorize(msg, 'DANGLING' if problems else 'OK', color)}")
     return 1 if problems else 0
+
+
+RENDERERS = {"human": render_human, "json": render_json}
+
+
+class FormatConflict(Exception):
+    pass
+
+
+def resolve_format(args) -> str:
+    """--json and --format may agree; if they disagree, that is an error, not
+    a silent pick between the two."""
+    fmt = getattr(args, "format", None) or "human"
+    if getattr(args, "json", False):
+        if args.format and args.format != "json":
+            raise FormatConflict(
+                f"error: --json conflicts with --format {args.format} "
+                f"(--json implies --format json)")
+        fmt = "json"
+    return fmt
+
+
+def cmd_check(idx: Index, args) -> int:
+    try:
+        fmt = resolve_format(args)
+    except FormatConflict as e:
+        print(e, file=sys.stderr)
+        return 2
+    results = []
+    for rel in scoped_files(idx, args.paths):
+        for ref in parse_refs(idx, rel):
+            verdict, detail = classify(idx, ref)
+            if verdict != "OK" or args.verbose:
+                results.append((verdict, ref, detail))
+    problems = sum(1 for v, _, _ in results if v in BAD)
+    return RENDERERS[fmt](results, problems, args)
 
 
 def cmd_stamp(idx: Index, args) -> int:
@@ -481,6 +512,8 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("check", help="report reference problems")
     c.add_argument("paths", nargs="*")
     c.add_argument("--json", action="store_true")
+    c.add_argument("--format", choices=sorted(RENDERERS), default=None,
+                   help="output format (default: human); --json is an alias for --format json")
     c.add_argument("--verbose", "-v", action="store_true", help="also list OK refs")
     c.add_argument("--no-color", action="store_true", help="disable colored output")
     c.set_defaults(fn=cmd_check)
