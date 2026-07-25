@@ -139,7 +139,7 @@ items:
     source: IDEAS.md
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/ID-10-explain.md
     blocked_by: [FMT-01]
     touches: [reflock.py]

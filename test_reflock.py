@@ -880,6 +880,122 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(rows, [{"file": "a.md", "line": 1, "target": "t.md", "pin": "unpinned"}])
 
+    # --- explain -----------------------------------------------------------
+    def run_explain(self, *args):
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "explain", *args])
+        return rc, buf.getvalue(), err.getvalue()
+
+    def explain_json(self, *args):
+        rc, out, err = self.run_explain(*args, "--format", "json")
+        return rc, json.loads(out), err
+
+    def test_explain_ok_reference(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "See [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        rc, entries, _ = self.explain_json("a.md:1")
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(entries), 1)
+        e = entries[0]
+        self.assertEqual(e["target"], "t.md#decision")
+        self.assertEqual(e["resolves_to"], "t.md")
+        self.assertEqual(e["verdict"], "OK")
+        self.assertIsNotNone(e["pin"])
+        self.assertIsNotNone(e["current"])
+        self.assertEqual(e["current"], e["pin"])
+
+    def test_explain_drifted_shows_both_hashes(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "See [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose Y instead.\n")
+        rc, entries, _ = self.explain_json("a.md:1")
+        e = entries[0]
+        self.assertEqual(e["verdict"], "DRIFTED")
+        self.assertIsNotNone(e["pin"])
+        self.assertIsNotNone(e["current"])
+        self.assertNotEqual(e["pin"], e["current"])
+        rc_h, out, _ = self.run_explain("a.md:1")
+        self.assertIn("not recoverable", out.lower())
+
+    def test_explain_dangling(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, entries, _ = self.explain_json("a.md:1")
+        e = entries[0]
+        self.assertEqual(e["verdict"], "DANGLING")
+        self.assertIsNotNone(e["detail"])
+        self.assertIsNone(e["resolves_to"])
+
+    def test_explain_unpinned_no_hash(self):
+        self.write("t.md", "# H\n")
+        self.write("a.md", "See [x](t.md).\n")
+        rc, entries, _ = self.explain_json("a.md:1")
+        e = entries[0]
+        self.assertEqual(e["verdict"], "OK")
+        self.assertIsNone(e["current"])
+
+    def test_explain_multiple_refs_on_line(self):
+        self.write("t.md", "# H\n")
+        self.write("u.md", "# H2\n")
+        self.write("a.md", "See [x](t.md) and [y](u.md).\n")
+        rc, entries, _ = self.explain_json("a.md:1")
+        self.assertEqual([e["target"] for e in entries], ["t.md", "u.md"])
+
+    def test_explain_no_reference_on_line(self):
+        self.write("a.md", "no refs here\n")
+        rc, out, err = self.run_explain("a.md:1")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("no reference", (out + err).lower())
+
+    def test_explain_verdict_matches_check(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "See [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose Y instead.\n")
+        rc_c, findings = self.check_json()
+        rc_e, entries, _ = self.explain_json("a.md:1")
+        self.assertEqual(entries[0]["verdict"], findings[0]["verdict"])
+
+    def test_explain_missing_line_spec(self):
+        self.write("a.md", "text\n")
+        rc, out, err = self.run_explain("a.md")
+        self.assertNotEqual(rc, 0)
+
+    def test_explain_non_numeric_line(self):
+        self.write("a.md", "text\n")
+        rc, out, err = self.run_explain("a.md:x")
+        self.assertNotEqual(rc, 0)
+
+    def test_explain_out_of_range_line(self):
+        self.write("a.md", "text\n")
+        rc, out, err = self.run_explain("a.md:99")
+        self.assertNotEqual(rc, 0)
+
+    def test_explain_anchor_heading_span(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n\n## Next\n\nmore\n")
+        self.write("a.md", "See [d](t.md#decision).\n")
+        rc, entries, _ = self.explain_json("a.md:1")
+        a = entries[0]["anchor"]
+        self.assertEqual(a["kind"], "heading")
+        self.assertEqual((a["start"], a["end"]), (3, 6))
+
+    def test_explain_anchor_marker_span(self):
+        self.write("lib.py", "# reflock-anchor: run\ndef run():\n    return 1\n# reflock-anchor-end: run\n")
+        self.write("caller.py", "# REF: lib.py#run\n")
+        rc, entries, _ = self.explain_json("caller.py:1")
+        a = entries[0]["anchor"]
+        self.assertEqual(a["kind"], "span")
+        self.assertEqual((a["start"], a["end"]), (2, 3))
+
+    def test_explain_is_read_only(self):
+        self.write("t.md", "# H\n")
+        self.write("a.md", "See [x](t.md).\n")
+        before = self.read("a.md")
+        self.run_explain("a.md:1")
+        self.assertEqual(self.read("a.md"), before)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -102,6 +102,7 @@ class Ref:
     pin: str | None   # None=unpinned, ''=opted-in-unstamped, hex=pinned
     pin_span: tuple[int, int] | None  # (start,end) of hex within the source line
     wiki: bool = False  # True for [[wiki-link]] targets - enables basename fallback (D4)
+    col: int = 0      # 0-based column of the match start, for column-ordering multiple refs on a line
 
 
 @dataclass
@@ -295,7 +296,7 @@ def parse_refs(idx: Index, rel: str) -> list[Ref]:
                 pin = m.group("pin")
                 span = m.span("pin") if pin is not None else None
                 refs.append(Ref(rel, i + 1, kind, m.group("target"), pin, span,
-                                 wiki=(pat is WIKI_LINK)))
+                                 wiki=(pat is WIKI_LINK), col=m.start()))
     return refs
 
 
@@ -346,11 +347,17 @@ def unit_text(idx: Index, path: str, anchor: str | None) -> str | list | None:
     return None
 
 
-def classify(idx: Index, ref: Ref) -> tuple[str, str]:
-    """Return (verdict, detail)."""
+def resolve_target(idx: Index, ref: Ref) -> tuple[str, str | None, str | None, str | None]:
+    """Resolve ref.target down to (kind, path, anchor, detail).
+
+    kind is one of 'external', 'outside', 'dir', 'dangling', 'file'. path and
+    anchor are set only when kind == 'file'; detail explains a 'dangling'
+    kind. Shared by classify (verdicts) and cmd_explain (display) so the two
+    can't diverge on what a target resolves to.
+    """
     tgt = ref.target
     if EXTERNAL.match(tgt) and not tgt.startswith("#"):
-        return "OK", "external"
+        return "external", None, None, None
     if tgt.startswith("#"):
         path, anchor = ref.src, tgt[1:]
     else:
@@ -359,15 +366,29 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
         if ref.wiki:
             path, detail = resolve_wikilink(idx, ref.src, path_part)
             if path is None:
-                return "DANGLING", detail
+                return "dangling", None, None, detail
         else:
             path = resolve_path(ref.src, path_part)
             if path is None:
-                return "OK", "outside tree"
+                return "outside", None, None, None
             if path not in idx.files:
                 if path.rstrip("/") in idx.dirs:
-                    return "OK", "dir"
-                return "DANGLING", f"no such file: {path}"
+                    return "dir", None, None, None
+                return "dangling", None, None, f"no such file: {path}"
+    return "file", path, anchor, None
+
+
+def classify(idx: Index, ref: Ref) -> tuple[str, str]:
+    """Return (verdict, detail)."""
+    kind, path, anchor, detail = resolve_target(idx, ref)
+    if kind == "external":
+        return "OK", "external"
+    if kind == "outside":
+        return "OK", "outside tree"
+    if kind == "dir":
+        return "OK", "dir"
+    if kind == "dangling":
+        return "DANGLING", detail
     unit = unit_text(idx, path, anchor)
     if unit is None:
         return "DANGLING", f"no anchor '#{anchor}' in {path}"
@@ -379,6 +400,23 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
     if actual != ref.pin:
         return "DRIFTED", f"pinned @{ref.pin}, now @{actual}"
     return "OK", "pinned"
+
+
+def locate_anchor(idx: Index, path: str, anchor: str) -> tuple[str, int, int] | tuple[None, None, None]:
+    """Return (kind, start_line, end_line), 1-based inclusive, for a resolved anchor."""
+    lines = idx.lines.get(path, [])
+    for slug, start, level in idx.headings.get(path, []):
+        if slug == anchor:
+            end = len(lines)
+            for s2, st2, lv2 in idx.headings[path]:
+                if st2 > start and lv2 <= level:
+                    end = st2
+                    break
+            return "heading", start + 1, end
+    span = idx.spans.get(path, {}).get(anchor)
+    if span:
+        return "span", span[0] + 1, span[1]
+    return None, None, None
 
 
 # --- commands ----------------------------------------------------------------
@@ -596,6 +634,94 @@ def cmd_backlinks(idx: Index, args) -> int:
     return BACKLINKS_RENDERERS[fmt](rows, target_path, args)
 
 
+def explain_entry(idx: Index, ref: Ref) -> dict:
+    verdict, detail = classify(idx, ref)
+    kind, path, anchor, _ = resolve_target(idx, ref)
+    entry = {"file": ref.src, "line": ref.line, "target": ref.target, "verdict": verdict,
+              "detail": detail, "resolves_to": None, "anchor": None, "pin": None, "current": None,
+              "unit_text": None}
+    if kind != "file":
+        return entry
+    entry["resolves_to"] = path
+    if anchor:
+        akind, start, end = locate_anchor(idx, path, anchor)
+        if akind:
+            entry["anchor"] = {"kind": akind, "start": start, "end": end}
+    if ref.pin:
+        entry["pin"] = ref.pin
+    elif ref.pin == "":
+        entry["pin"] = "unstamped"
+    else:
+        entry["pin"] = "unpinned"
+    if ref.pin is not None:
+        unit = unit_text(idx, path, anchor)
+        entry["unit_text"] = unit
+        entry["current"] = fingerprint(unit) if unit is not None else None
+    return entry
+
+
+def render_explain_human(entries, args) -> int:
+    color = use_color(args)
+    for e in entries:
+        print(f"reference   {e['file']}:{e['line']}")
+        print(f"target      {e['target']}")
+        if e["resolves_to"]:
+            print(f"resolves to {e['resolves_to']}")
+        else:
+            print(f"resolves to (unresolved) [{e['detail']}]")
+        if e["anchor"]:
+            a = e["anchor"]
+            label = "matched heading" if a["kind"] == "heading" else "matched span"
+            print(f"anchor      {label}, lines {a['start']}-{a['end']}")
+        if e["pin"] is not None:
+            print(f"pin         {e['pin']}")
+        if e["current"] is not None:
+            print(f"current     {e['current']}")
+        print(f"verdict     {colorize(e['verdict'], e['verdict'], color)}")
+        if e["verdict"] == "DRIFTED":
+            print("note: the prior pinned text is not recoverable (only its hash "
+                  "was stored) - showing the current text below.")
+        if e["unit_text"] is not None:
+            print()
+            print(e["unit_text"])
+        print()
+    return 1 if any(e["verdict"] in BAD for e in entries) else 0
+
+
+def render_explain_json(entries, args) -> int:
+    print(json.dumps([{k: v for k, v in e.items() if k != "unit_text"} for e in entries], indent=2))
+    return 1 if any(e["verdict"] in BAD for e in entries) else 0
+
+
+EXPLAIN_RENDERERS = {"human": render_explain_human, "json": render_explain_json}
+
+
+def cmd_explain(idx: Index, args) -> int:
+    try:
+        fmt = resolve_format(args)
+    except FormatConflict as e:
+        print(e, file=sys.stderr)
+        return 2
+    file_part, sep, line_part = args.spec.rpartition(":")
+    if not sep or not line_part.isdigit() or int(line_part) < 1:
+        print(f"error: invalid <file>:<line> spec: {args.spec}", file=sys.stderr)
+        return 2
+    rel, lineno = file_part, int(line_part)
+    if rel not in idx.files:
+        print(f"error: no such file in index: {rel}", file=sys.stderr)
+        return 2
+    lines = idx.lines.get(rel)
+    if lines is None or lineno > len(lines):
+        print(f"error: {rel} has no line {lineno}", file=sys.stderr)
+        return 2
+    refs = sorted((r for r in parse_refs(idx, rel) if r.line == lineno), key=lambda r: r.col)
+    if not refs:
+        print(f"error: no reference on {rel}:{lineno}", file=sys.stderr)
+        return 2
+    entries = [explain_entry(idx, r) for r in refs]
+    return EXPLAIN_RENDERERS[fmt](entries, args)
+
+
 def cmd_suspects(idx: Index, args) -> int:
     # Pass 1: collect path-shaped tokens that resolve to nothing.
     candidates = []  # (rel, lineno, token, [paths to test against .gitignore])
@@ -668,6 +794,11 @@ def build_parser() -> argparse.ArgumentParser:
     bl.add_argument("--format", choices=sorted(BACKLINKS_RENDERERS), default=None,
                     help="output format (default: human)")
     bl.set_defaults(fn=cmd_backlinks)
+    ex = sub.add_parser("explain", help="everything about one reference")
+    ex.add_argument("spec", help="<file>:<line>")
+    ex.add_argument("--format", choices=sorted(EXPLAIN_RENDERERS), default=None,
+                    help="output format (default: human)")
+    ex.set_defaults(fn=cmd_explain)
     comp = sub.add_parser("completion", help="print a shell completion script")
     comp.add_argument("shell", choices=COMPLETION_SHELLS)
     comp.set_defaults(fn=cmd_completion, needs_index=False)
