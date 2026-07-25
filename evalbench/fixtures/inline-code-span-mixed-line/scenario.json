@@ -1,0 +1,11 @@
+{
+  "description": "A real link sharing a line with a code-span link is still found and resolved; only the code-span link is exempt.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

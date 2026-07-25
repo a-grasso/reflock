@@ -237,6 +237,11 @@ touching nothing else.
   to the current working directory**, not `--root` - same convention as `git`,
   `find`, etc. Run from the repo root (or pass absolute paths) if you're
   scripting against a `--root` that differs from your CWD.
+- **Fenced code blocks and inline code spans aren't parsed for references.**
+  A markdown renderer treats their content as literal text, so a link or
+  `REF:` comment written there to illustrate the grammar - like the examples
+  in this README - is not itself checked. The trade-off: a genuine reference
+  someone wraps in backticks silently stops being checked too.
 
 ## Prior art
 

@@ -157,6 +157,49 @@ class ReflockTest(unittest.TestCase):
         self.write("a.md", "Some text.\n\n```\nSee [x](missing.md) and # REF: also/missing.py\n```\n")
         self.assertEqual(self.verdicts("a.md"), [])
 
+    def test_inline_code_span_link_not_a_reference(self):
+        self.write("a.md", "See `[x](t.md)` for the syntax.\n")
+        self.assertEqual(self.verdicts("a.md"), [])
+
+    def test_inline_code_span_does_not_suppress_real_link(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [x](t.md) for the thing.\n")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
+    def test_inline_code_span_ref_comment_exempt_in_markdown(self):
+        self.write("a.md", "`# REF: t.md` is how you write it.\n")
+        self.assertEqual(self.verdicts("a.md"), [])
+
+    def test_inline_code_span_ref_comment_still_live_in_code_file(self):
+        self.write("a.py", "# `# REF: t.md`\n")
+        verdicts = self.verdicts("a.py")
+        self.assertEqual([v for v, _ in verdicts], ["DANGLING"])
+
+    def test_inline_code_span_mixed_line(self):
+        self.write("real.md", "# R\n")
+        self.write("a.md", "Mixed `[a](skip.md)` and [b](real.md)\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "real.md")
+        self.assertEqual(self.verdicts("a.md"), [("OK", "unpinned")])
+
+    def test_inline_code_span_double_backtick_exempt(self):
+        self.write("a.md", "See ``[x](missing.md)`` here.\n")
+        self.assertEqual(self.verdicts("a.md"), [])
+
+    def test_inline_unterminated_backtick_still_yields_reference(self):
+        self.write("a.md", "Odd ` mark then [x](missing.md).\n")
+        self.assertEqual(self.verdict("a.md"), "DANGLING")
+
+    def test_inline_code_span_pin_span_offset_preserved(self):
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "See `[x](skip.md)` then [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        content = self.read("a.md")
+        self.assertIn("`[x](skip.md)`", content)
+        self.assertRegex(content, r"\(t\.md#decision\)<!--@[0-9a-f]{8}-->")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
     def test_binary_target_treated_as_empty_unit(self):
         with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
             fh.write(b"\x00\x01binary")

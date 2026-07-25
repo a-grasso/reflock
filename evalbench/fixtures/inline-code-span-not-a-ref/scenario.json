@@ -1,0 +1,11 @@
+{
+  "description": "A code-span link to a missing file is literal text, not a reference - never DANGLING.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
