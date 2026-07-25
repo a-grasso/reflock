@@ -204,6 +204,13 @@ default. `--json` is a retained alias for `--format json`. Passing both is
 fine as long as they agree; passing `--json` with a conflicting `--format`
 exits nonzero with an error naming both flags.
 
+`check -q` / `check --quiet` prints nothing on success; on failure it prints
+one summary line - `reflock: 1 of 137 references failed` - to **stderr** and
+exits nonzero, for a CI log that only wants to hear from reflock when
+something's wrong. With `--format json`, `-q` leaves the findings array on
+stdout untouched and just suppresses the human summary line. `-q --verbose`
+is contradictory and exits nonzero naming both flags.
+
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
 source of truth reflock exists to keep A and B from silently disagreeing about.

@@ -640,6 +640,52 @@ class ReflockTest(unittest.TestCase):
         self.assertNotEqual(cm.exception.code, 0)
         self.assertIn("invalid choice", buf_err.getvalue())
 
+    # --- -q/--quiet --------------------------------------------------------
+    def test_quiet_clean_tree_is_silent(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        rc, out = self.run_check("-q")
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_quiet_failure_summary_line_on_stderr(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "check", "-q"])
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(buf.getvalue(), "")
+        self.assertEqual(err.getvalue(), "reflock: 1 of 1 references failed\n")
+
+    def test_quiet_and_quiet_long_flag_equivalent(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf1, err1 = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf1), contextlib.redirect_stderr(err1):
+            reflock.main(["--root", self.d, "check", "-q"])
+        buf2, err2 = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf2), contextlib.redirect_stderr(err2):
+            reflock.main(["--root", self.d, "check", "--quiet"])
+        self.assertEqual(buf1.getvalue(), buf2.getvalue())
+        self.assertEqual(err1.getvalue(), err2.getvalue())
+
+    def test_quiet_json_still_emits_findings(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "check", "-q", "--format", "json"])
+        self.assertEqual(rc, 1)
+        findings = json.loads(buf.getvalue())
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(err.getvalue(), "")
+
+    def test_quiet_verbose_conflict(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "check", "-q", "--verbose"])
+        self.assertNotEqual(rc, 0)
+        self.assertIn("--quiet", buf.getvalue() + err.getvalue())
+        self.assertIn("--verbose", buf.getvalue() + err.getvalue())
+
     def test_scoped_check_limits_to_path_arg(self):
         # path args are resolved relative to the process CWD (like git/find), not --root
         self.write("docs/a.md", "See [x](missing.md).\n")

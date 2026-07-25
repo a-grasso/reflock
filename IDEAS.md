@@ -74,13 +74,6 @@ than by priority tier.
     patterns, default output format, and future per-path pin policy currently
     have to be repeated as flags in every hook and every CI step. One file,
     read once, checked in next to `.reflockignore`.
-13. **A quiet/errors-only mode with a one-line summary.** `check --silent` (or
-    `-q`) suppresses the per-reference `OK` noise and prints just a summary —
-    `1 of 137 references failed` — to stderr on failure. Useful for a CI log
-    that only wants to hear from reflock when something's actually wrong,
-    matching the quiet-by-default posture of `black --check`/`terraform fmt
-    -check`.
-
 ## Effectiveness — catching more real drift
 
 14. **Fuzzy/percentage drift instead of only exact-hash mismatch.** Today

@@ -1,0 +1,14 @@
+{
+  "description": "check -q --format json: the findings array on stdout is unchanged; -q only suppresses human prose.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["-q", "--format", "json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"verdict": "DANGLING", "file": "a.md", "line": 1, "target": "missing.md",
+         "detail": "no such file: missing.md"}
+      ]
+    }
+  ]
+}
