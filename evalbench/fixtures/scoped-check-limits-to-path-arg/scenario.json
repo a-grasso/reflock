@@ -1,0 +1,22 @@
+{
+  "description": "Passing a path argument scopes `check` to files under that path only.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json",
+        "docs"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "DANGLING",
+          "file": "docs/a.md",
+          "line": 1,
+          "target": "missing.md",
+          "detail": "no such file: docs/missing.md"
+        }
+      ]
+    }
+  ]
+}

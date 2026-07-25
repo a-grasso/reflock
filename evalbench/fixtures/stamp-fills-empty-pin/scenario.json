@@ -1,0 +1,21 @@
+{
+  "description": "`stamp` splices the fingerprint hex into the empty `<!--@-->` marker in place.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_file_regex": {
+        "a.md": "<!--@[0-9a-f]{8}-->"
+      }
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

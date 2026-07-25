@@ -1,0 +1,13 @@
+{
+  "description": "Version-like slash tokens aren't path-shaped (no letter-led extension) - not a false positive.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

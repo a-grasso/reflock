@@ -1,0 +1,33 @@
+{
+  "description": "GitHub-style duplicate-heading disambiguation (#sec, #sec-1) each pin their own section.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    },
+    {
+      "write": {
+        "t.md": "# Title\n\n## Sec\n\nfirst\n\n## Sec\n\nsecond CHANGED\n"
+      },
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": [
+        "DRIFTED (1)",
+        "a.md:2",
+        "t.md#sec-1",
+        "pinned @",
+        "now @"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "description": "A file matched by .reflockignore is never scanned as a source, but remains a valid target.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

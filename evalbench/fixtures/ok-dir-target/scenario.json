@@ -1,0 +1,22 @@
+{
+  "description": "A link to a directory (not a file) is OK with detail 'dir'.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json",
+        "--verbose"
+      ],
+      "expect_exit": 0,
+      "expect_json": [
+        {
+          "verdict": "OK",
+          "file": "a.md",
+          "line": 1,
+          "target": "assets",
+          "detail": "dir"
+        }
+      ]
+    }
+  ]
+}

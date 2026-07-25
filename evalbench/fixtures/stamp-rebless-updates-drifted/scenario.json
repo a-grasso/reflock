@@ -1,0 +1,36 @@
+{
+  "description": "`stamp --rebless` re-hashes existing pins, clearing a DRIFTED verdict.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "write": {
+        "t.md": "# H\n\n## Decision\n\nWe chose Y instead.\n"
+      },
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": [
+        "DRIFTED (1)"
+      ]
+    },
+    {
+      "cmd": "stamp",
+      "args": [
+        "--rebless"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
