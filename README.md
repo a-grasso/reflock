@@ -193,6 +193,7 @@ reflock stamp          # fill empty pins
 reflock stamp --rebless doc/DESIGN.md   # accept current target state for these refs
 reflock stamp --check   # report what stamp would do, write nothing (exit 1 if not a no-op)
 reflock suspects --all # bare path-shaped tokens that resolve to nothing
+reflock backlinks doc/DESIGN.md   # what points at this file, before you edit it
 ```
 
 `check` colors verdict labels by severity when stdout is a terminal; pass
@@ -219,6 +220,19 @@ reflock completion bash > /etc/bash_completion.d/reflock
 reflock completion zsh  > ~/.zsh/completions/_reflock   # keep the directory on fpath
 reflock completion fish > ~/.config/fish/completions/reflock.fish
 ```
+
+`reflock backlinks <path>` answers "what points at this file" - the question
+you want answered before editing a heavily-cited document, so you know what
+you'd invalidate. `<path>` accepts an anchor (`doc/DESIGN.md#section`) to
+narrow to references targeting that anchor specifically. Each line is the
+referring file and line, the target as written, and its pin state
+(`unpinned`, `unstamped`, or `pinned`) - pin state matters because an
+unpinned reference won't notice your edit. A path with no backlinks prints a
+clear "no backlinks" line and exits 0; a path absent from the index exits
+nonzero, since silently reporting zero backlinks for a typo'd filename would
+mislead. It's read-only and supports `--format <human|json>` per the same
+renderer `check` uses; the JSON shape is a list of
+`{"file", "line", "target", "pin"}` objects.
 
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
