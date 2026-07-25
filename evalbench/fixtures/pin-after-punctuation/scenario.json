@@ -1,0 +1,33 @@
+{
+  "description": "A pin separated from its link by sentence punctuation (`…#decision).<!--@-->`, the README's canonical form) is still recognized: reported UNSTAMPED, filled by `stamp`, then OK.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "UNSTAMPED",
+          "file": "a.md",
+          "line": 1,
+          "target": "t.md#decision",
+          "detail": "run: reflock stamp"
+        }
+      ]
+    },
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_file_regex": {
+        "a.md": "\\)\\.<!--@[0-9a-f]{8}-->"
+      }
+    },
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
