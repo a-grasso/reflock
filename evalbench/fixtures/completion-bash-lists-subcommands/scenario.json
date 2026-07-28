@@ -1,0 +1,14 @@
+{
+  "description": "TEST-01: the bash script names every subcommand the live parser declares, and declares --format's values rather than just its name.",
+  "steps": [
+    {
+      "cmd": "completion",
+      "args": ["bash"],
+      "expect_exit": 0,
+      "expect_contains": [
+        "backlinks check completion explain stamp suspects",
+        "complete -F _reflock_completion reflock"
+      ]
+    }
+  ]
+}

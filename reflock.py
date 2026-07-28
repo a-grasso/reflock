@@ -1003,21 +1003,44 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def parser_spec() -> dict[str, list[str]]:
-    """subcommand name -> sorted long/short flags, walked off the live parser.
+def parser_spec() -> dict[str, dict]:
+    """A projection of the live parser, per subcommand:
+
+        {"flags":              sorted long/short flags,
+         "groups":             [(long, short), …] - one entry per option, so a
+                               short flag is emitted as an alias of its long
+                               form rather than an unrelated second option,
+         "valued":             {flag: [choices]} for flags taking a value,
+         "positional_choices": choices of any positional argument}
 
     Used both to generate the completion scripts and, in tests, to assert they
     stay in parity with the parser - so a new subcommand or flag can't go
     stale in the shipped scripts without a test failing.
+
+    It reports more than flag names because flag names alone were not enough
+    (TEST-01): positional `choices` were dropped, so `reflock completion <TAB>`
+    offered file paths instead of the three shells, and zsh was told `--format`
+    takes no argument, so it could not complete the format after it.
     """
     ap = build_parser()
     sub_action = next(a for a in ap._subparsers._group_actions
                        if isinstance(a, argparse._SubParsersAction))
     spec = {}
     for name, subparser in sub_action.choices.items():
-        flags = sorted({opt for action in subparser._actions
-                         for opt in action.option_strings if opt != "-h" and opt != "--help"})
-        spec[name] = flags
+        flags, groups, valued, positional_choices = set(), [], {}, []
+        for action in subparser._actions:
+            opts = [o for o in action.option_strings if o not in ("-h", "--help")]
+            if not action.option_strings and action.choices:
+                positional_choices.extend(sorted(action.choices))
+                continue
+            if opts:
+                groups.append(tuple(sorted(opts, key=lambda o: (not o.startswith("--"), o))))
+            for opt in opts:
+                flags.add(opt)
+                if action.nargs != 0:   # store_true has nargs == 0
+                    valued[opt] = sorted(action.choices) if action.choices else []
+        spec[name] = {"flags": sorted(flags), "groups": sorted(groups), "valued": valued,
+                      "positional_choices": positional_choices}
     return spec
 
 
@@ -1045,10 +1068,14 @@ def completion_script(shell: str) -> str:
             '    case "${words[1]}" in',
         ]
         for name in subs:
-            flags = " ".join(spec[name])
-            lines.append(f'        {name}) COMPREPLY=( $(compgen -W "{flags}" -- "$cur") ) ;;')
+            # A subcommand whose positional has choices completes those instead
+            # of paths: `reflock completion <TAB>` takes a shell name.
+            words = " ".join(spec[name]["positional_choices"] or spec[name]["flags"])
+            lines.append(f'        {name}) COMPREPLY=( $(compgen -W "{words}" -- "$cur") ) ;;')
+        path_subs = [n for n in subs if not spec[n]["positional_choices"]]
         lines += [
             "    esac",
+            f'    case "${{words[1]}}" in {"|".join(path_subs)}) ;; *) return ;; esac',
             '    if [[ "$cur" != -* ]]; then',
             "        if type -t _filedir >/dev/null 2>&1; then",
             "            _filedir",
@@ -1081,8 +1108,29 @@ def completion_script(shell: str) -> str:
             '    case "${words[2]}" in',
         ]
         for name in subs:
-            flags = " ".join(f'"{f}"' for f in spec[name])
-            lines.append(f"        {name}) _arguments {flags} '*:file:_files' ;;")
+            info = spec[name]
+            parts = []
+            for group in info["groups"]:
+                primary = group[0]
+                label = primary.lstrip("-")
+                choices = info["valued"].get(primary)
+                if choices is not None:
+                    # Tell zsh the option takes a value, and what values, or it
+                    # cannot complete anything after `--format `.
+                    values = f"({' '.join(choices)})" if choices else "( )"
+                    parts.append(f"'{primary}=[{label}]:{label}:{values}'")
+                elif len(group) > 1:
+                    # One option with two spellings, not two options: zsh then
+                    # stops offering -q once --quiet is on the line.
+                    alts = " ".join(group)
+                    parts.append(f"'({alts})'{{{','.join(group)}}}'[{label}]'")
+                else:
+                    parts.append(f'"{primary}"')    # a plain switch
+            if info["positional_choices"]:
+                parts.append(f"'1:{name}:({' '.join(info['positional_choices'])})'")
+            else:
+                parts.append("'*:file:_files'")
+            lines.append(f"        {name}) _arguments {' '.join(parts)} ;;")
         lines += [
             "    esac",
             "}",
@@ -1097,14 +1145,25 @@ def completion_script(shell: str) -> str:
             f'complete -c reflock -n "__fish_use_subcommand" -a "{" ".join(subs)}"',
         ]
         for name in subs:
-            for flag in spec[name]:
-                opt = "-l " + flag[2:] if flag.startswith("--") else "-s " + flag[1:]
+            info = spec[name]
+            for group in info["groups"]:
+                # One completion per option carrying every spelling, so fish
+                # knows -q and --quiet are the same switch.
+                opt = " ".join("-l " + f[2:] if f.startswith("--") else "-s " + f[1:]
+                                for f in group)
+                choices = info["valued"].get(group[0])
+                # `-r` marks the flag as requiring a value; `-a` supplies them.
+                if choices:
+                    opt += f' -r -a "{" ".join(choices)}"'
+                elif choices == []:
+                    opt += " -r"
                 lines.append(
-                    f'complete -c reflock -n "__fish_seen_subcommand_from {name}" '
-                    f'{opt}  # {flag}'
+                    f'complete -c reflock -n "__fish_seen_subcommand_from {name}" {opt}'
                 )
+            arg = (f'"{" ".join(info["positional_choices"])}"'
+                   if info["positional_choices"] else '"(__fish_complete_path)"')
             lines.append(
-                f'complete -c reflock -n "__fish_seen_subcommand_from {name}" -a "(__fish_complete_path)"'
+                f'complete -c reflock -n "__fish_seen_subcommand_from {name}" -a {arg}'
             )
         lines.append("")
         return "\n".join(lines)
