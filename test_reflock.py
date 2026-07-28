@@ -527,6 +527,35 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- BUG-06: suspects honours the code-span exemption too ---------------
+    def suspects_hits(self, *args):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "suspects", "--json", *args])
+        return [h["target"] for h in json.loads(buf.getvalue())]
+
+    def test_suspects_ignores_path_in_code_span(self):
+        self.write("a.md", "Older builds wrote to `build/legacy/out.json` once.\n")
+        self.assertEqual([], self.suspects_hits())
+
+    def test_suspects_still_catches_prose_path_on_the_same_line(self):
+        """Masking must not suppress the rest of the line - the BUG-02 lesson."""
+        self.write("a.md", "See `build/legacy/out.json` and also docs/gone.md here.\n")
+        self.assertEqual(["docs/gone.md"], self.suspects_hits())
+
+    def test_suspects_double_backtick_span_exempt(self):
+        self.write("a.md", "Literal ``build/legacy/out.json`` in prose.\n")
+        self.assertEqual([], self.suspects_hits())
+
+    def test_suspects_unterminated_backtick_does_not_silence_line(self):
+        self.write("a.md", "An open ` tick then docs/gone.md follows.\n")
+        self.assertEqual(["docs/gone.md"], self.suspects_hits())
+
+    def test_suspects_code_file_backticks_still_scanned(self):
+        self.write("m.py", "# see `build/legacy/out.json` for the old path\n")
+        self.assertEqual(["build/legacy/out.json"], self.suspects_hits("--all"),
+                          "backticks are not code-span syntax in a .py file")
+
     # --- UX-01: the unit text is a preview, not a dump ----------------------
     def long_target(self, n, anchor=False):
         head = "# T\n\n## Sec\n\n" if anchor else ""
