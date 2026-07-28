@@ -1,0 +1,14 @@
+{
+  "description": "BUG-05: a file that does not end in a newline must not gain one. cmd_stamp used to write \"\\n\".join(lines) + \"\\n\", appending a terminator the file never had.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["Stamped 1 pin(s)."],
+      "expect_file_regex": {
+        "a.md": "no trailing newline \\[y\\]\\(t\\.md\\)<!--@[0-9a-f]{8}-->\\Z"
+      }
+    }
+  ]
+}

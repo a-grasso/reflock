@@ -1,0 +1,26 @@
+{
+  "description": "BUG-05: stamping one pin in a CRLF file must not rewrite the file's line endings. Previously cmd_stamp rebuilt the file from a universal-newline read, so every \\r\\n in it - including on lines holding no reference - became \\n, and a one-pin stamp was a whole-file diff.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["Stamped 1 pin(s)."],
+      "expect_file_regex": {
+        "a.md": "^crlf \\[z\\]\\(t\\.md\\)<!--@[0-9a-f]{8}-->\r\nsecond line\r\nthird line\r\n$"
+      }
+    },
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["All references OK."]
+    },
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_tree_unchanged_since_step": 0
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+# The CRLF line endings in this fixture ARE the assertion (BUG-05: stamp must
+# not rewrite a file's line endings). Without `-text`, a machine with
+# core.autocrlf=input stores the file with LF, and the fixture then passes
+# locally while failing on every fresh clone - the premise erased by the version
+# control system testing it.
+evalbench/fixtures/stamp-preserves-crlf/repo/a.md -text

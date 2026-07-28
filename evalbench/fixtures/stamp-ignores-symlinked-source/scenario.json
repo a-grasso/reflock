@@ -1,0 +1,34 @@
+{
+  "description": "BUG-05: a symlinked file is not scanned for references, so stamp cannot write through it. link.md points at sub/doc.md, whose relative target resolves to sub/t.md from its real location but to the differently-worded t.md from the repo root - so a scanned symlink would report a second pin and write a conflicting fingerprint into the same file. Exactly one pin is stamped, and it is sub/t.md's.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "UNSTAMPED",
+          "file": "sub/doc.md",
+          "line": 1,
+          "target": "t.md",
+          "detail": "run: reflock stamp"
+        }
+      ]
+    },
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["Stamped 1 pin(s)."],
+      "expect_file_regex": {
+        "sub/doc.md": "<!--@4f66db61-->"
+      }
+    },
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["All references OK."]
+    }
+  ]
+}
