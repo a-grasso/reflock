@@ -34,9 +34,9 @@ jobs:
       - name: Refuse a tag that disagrees with __version__
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
-          src_version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' reflock.py)"
+          src_version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' reflock_lib/__init__.py)"
           if [ "$tag_version" != "$src_version" ]; then
-            echo "tag $GITHUB_REF_NAME says $tag_version, reflock.py says $src_version" >&2
+            echo "tag $GITHUB_REF_NAME says $tag_version, reflock_lib/__init__.py says $src_version" >&2
             exit 1
           fi
           echo "tag and __version__ agree on $src_version"
