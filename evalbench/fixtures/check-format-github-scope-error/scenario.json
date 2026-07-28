@@ -1,0 +1,12 @@
+{
+  "description": "BUG-07: check --format github puts a ScopeError on stdout as a ::error:: annotation, not stderr",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--format", "github", "nope.md"],
+      "expect_exit": 2,
+      "expect_contains": ["::error::no such path in tree: nope.md"],
+      "expect_stderr_empty": true
+    }
+  ]
+}

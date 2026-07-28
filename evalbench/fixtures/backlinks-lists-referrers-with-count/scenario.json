@@ -1,0 +1,11 @@
+{
+  "description": "UX-02: backlinks human output ends with a total count line, matching check/suspects/stamp",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md"],
+      "expect_exit": 0,
+      "expect_contains": ["a.md:1  t.md  unpinned", "b.md:1  t.md  unpinned", "2 backlink(s)."]
+    }
+  ]
+}

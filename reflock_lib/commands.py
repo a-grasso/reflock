@@ -117,7 +117,7 @@ def scoped_files(idx: Index, paths: list[str]) -> list[str]:
         elif w not in idx.files and w not in idx.dirs:
             unmatched.append(p)                 # echo the user's spelling
     if unmatched:
-        raise ScopeError("error: no such path in tree: " + ", ".join(unmatched))
+        raise ScopeError("no such path in tree: " + ", ".join(unmatched))
     return sorted(selected)
 
 
@@ -138,6 +138,10 @@ def render_human(results, problems: int, args) -> int:
             print(f"  {r.src}:{r.line}  {r.target}   [{d}]")
     msg = f"{problems} problem(s)." if problems else "All references OK."
     print(f"\n{colorize(msg, 'DANGLING' if problems else 'OK', color)}")
+    if problems:
+        print("\nRun `reflock explain <file>:<line>` for details on any of the above.")
+        if any(v == "UNSTAMPED" for v, _, _ in results):
+            print("Run `reflock stamp` to fill in UNSTAMPED pins.")
     return 1 if problems else 0
 
 
@@ -182,24 +186,60 @@ def resolve_format(args) -> str:
     if getattr(args, "json", False):
         if args.format and args.format != "json":
             raise FormatConflict(
-                f"error: --json conflicts with --format {args.format} "
+                f"--json conflicts with --format {args.format} "
                 f"(--json implies --format json)")
         fmt = "json"
     return fmt
+
+
+def intended_format(args) -> str:
+    """The format a command *meant* to use, without resolve_format's
+    conflict-checking - for rendering an error raised before (or instead of)
+    a successful resolve_format() call, so the error lands in the same shape
+    the caller asked for even when that ask was itself the problem.
+
+    Commands with no --format concept (stamp, suspects) always read "human"
+    here: they have no JSON/github renderer to route an error through (D1).
+    """
+    fmt = getattr(args, "format", None)
+    if fmt:
+        return fmt
+    return "json" if getattr(args, "json", False) else "human"
+
+
+def render_error(message: str, fmt: str) -> None:
+    """The one place a usage error becomes output, in whatever format the
+    command's caller asked for - the error-path counterpart to RENDERERS.
+
+    json/github land the error on stdout in their own shape, so a script or
+    agent that requested a format gets something to parse even on failure;
+    human keeps today's plain `error: <message>` line on stderr.
+    """
+    if fmt == "json":
+        print(json.dumps({"error": message}))
+    elif fmt == "github":
+        print(f"::error::{github_escape_message(message)}")
+    else:
+        print(f"error: {message}", file=sys.stderr)
 
 
 def cmd_check(idx: Index, args) -> int:
     try:
         fmt = resolve_format(args)
     except FormatConflict as e:
-        print(e, file=sys.stderr)
+        render_error(str(e), intended_format(args))
         return 2
     if args.quiet and args.verbose:
-        print("error: --quiet conflicts with --verbose", file=sys.stderr)
+        render_error("--quiet conflicts with --verbose", fmt)
         return 2
     results = []
     total = 0
-    for rel in scoped_files(idx, args.paths):
+    try:
+        scoped = scoped_files(idx, args.paths)
+    except ScopeError as e:
+        render_error(str(e), fmt)
+        return 2
+    for rel in scoped:
         for ref in parse_refs(idx, rel):
             verdict, detail = classify(idx, ref)
             total += 1
@@ -265,14 +305,19 @@ def cmd_stamp(idx: Index, args) -> int:
     if warn and not getattr(args, "check", False):
         # Plain `stamp` already exits 0, so accepting --warn there would imply it
         # did something.
-        print("error: --warn requires --check", file=sys.stderr)
+        render_error("--warn requires --check", intended_format(args))
         return 2
-    edits_by_rel, report = plan_stamp(idx, args)
+    try:
+        edits_by_rel, report = plan_stamp(idx, args)
+    except ScopeError as e:
+        render_error(str(e), intended_format(args))
+        return 2
     if getattr(args, "check", False):
         for rel, ref, kind, fp in report:
             print(f"  {rel}:{ref.line}  {ref.target}   [{kind}]")
         if report:
             print(f"\n{len(report)} pin(s) would be stamped.")
+            print("\nRun `reflock stamp` to apply.")
             # --warn reports without judging: the exit code is the only
             # difference, so a pre-commit-framework hook can be advisory even
             # though pre-commit itself has no warn-only mode (D6).
@@ -316,6 +361,7 @@ def render_backlinks_human(rows, target: str, args) -> int:
         return 0
     for rel, line, tgt, pin in rows:
         print(f"{rel}:{line}  {tgt}  {pin}")
+    print(f"\n{len(rows)} backlink(s).")
     return 0
 
 
@@ -332,19 +378,19 @@ def cmd_backlinks(idx: Index, args) -> int:
     try:
         fmt = resolve_format(args)
     except FormatConflict as e:
-        print(e, file=sys.stderr)
+        render_error(str(e), intended_format(args))
         return 2
     arg_path, _, target_anchor = args.path.partition("#")
     target_anchor = target_anchor or None
     target_path = indexed_path(idx, arg_path)
     if target_path is None:
-        print(f"error: no such file in index: {arg_path}", file=sys.stderr)
+        render_error(f"no such file in index: {arg_path}", fmt)
         return 2
     if target_anchor is not None and locate_anchor(idx, target_path, target_anchor)[0] is None:
         # Same reasoning as the missing-file case: "nothing points at this
         # section" is the answer you act on before editing that section, so a
         # misspelled anchor must not be able to produce it.
-        print(f"error: no anchor '#{target_anchor}' in {target_path}", file=sys.stderr)
+        render_error(f"no anchor '#{target_anchor}' in {target_path}", fmt)
         return 2
     rows = []
     for rel in scoped_files(idx, []):
@@ -458,24 +504,24 @@ def cmd_explain(idx: Index, args) -> int:
     try:
         fmt = resolve_format(args)
     except FormatConflict as e:
-        print(e, file=sys.stderr)
+        render_error(str(e), intended_format(args))
         return 2
     file_part, sep, line_part = args.spec.rpartition(":")
     if not sep or not line_part.isdigit() or int(line_part) < 1:
-        print(f"error: invalid <file>:<line> spec: {args.spec}", file=sys.stderr)
+        render_error(f"invalid <file>:<line> spec: {args.spec}", fmt)
         return 2
     lineno = int(line_part)
     rel = indexed_path(idx, file_part)
     if rel is None:
-        print(f"error: no such file in index: {file_part}", file=sys.stderr)
+        render_error(f"no such file in index: {file_part}", fmt)
         return 2
     lines = idx.lines.get(rel)
     if lines is None or lineno > len(lines):
-        print(f"error: {rel} has no line {lineno}", file=sys.stderr)
+        render_error(f"{rel} has no line {lineno}", fmt)
         return 2
     refs = [r for r in parse_refs(idx, rel) if r.line == lineno]  # parse_refs owns the order
     if not refs:
-        print(f"error: no reference on {rel}:{lineno}", file=sys.stderr)
+        render_error(f"no reference on {rel}:{lineno}", fmt)
         return 2
     entries = [explain_entry(idx, r) for r in refs]
     return EXPLAIN_RENDERERS[fmt](entries, args)
@@ -484,7 +530,12 @@ def cmd_explain(idx: Index, args) -> int:
 def cmd_suspects(idx: Index, args) -> int:
     # Pass 1: collect path-shaped tokens that resolve to nothing.
     candidates = []  # (rel, lineno, token, [paths to test against .gitignore])
-    for rel in scoped_files(idx, args.paths):
+    try:
+        scoped = scoped_files(idx, args.paths)
+    except ScopeError as e:
+        render_error(str(e), intended_format(args))
+        return 2
+    for rel in scoped:
         is_md = rel.endswith((".md", ".markdown"))
         if not args.all and not is_md:
             continue

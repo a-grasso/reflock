@@ -1,0 +1,12 @@
+{
+  "description": "BUG-07 regression guard: default (human) format keeps a ScopeError on stderr, stdout empty",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["nope.md"],
+      "expect_exit": 2,
+      "expect_stdout_empty": true,
+      "expect_stderr": ["error: no such path in tree: nope.md"]
+    }
+  ]
+}

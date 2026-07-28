@@ -1,0 +1,10 @@
+{
+  "description": "UX-03: a clean tree stays self-contained - no next-step hints appended",
+  "steps": [
+    {
+      "cmd": "check",
+      "expect_exit": 0,
+      "expect_not_contains": ["reflock"]
+    }
+  ]
+}

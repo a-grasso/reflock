@@ -346,6 +346,96 @@ items:
       still scans raw lines, so a path named in backticks in prose is a
       suspect. Strictly fewer false positives, which is D2's own rationale.
 
+  - id: BUG-07
+    title: usage errors ignore --format/--json
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/BUG-07-error-format-leak.md
+    blocked_by: []
+    touches: [reflock_lib/commands.py, reflock_lib/cli.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Every usage error printed plain text to stderr regardless of --format,
+      so a caller that asked for --format json/github got nothing structured
+      on stdout when a command failed. render_error() is the error-path
+      counterpart to the existing RENDERERS table (D1); ScopeError is now
+      caught inside each command that can raise it instead of once in
+      cli.py:main, so the catch site knows the command's resolved format.
+
+  - id: UX-02
+    title: backlinks human output has no total count
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/UX-02-backlinks-count-line.md
+    blocked_by: []
+    touches: [reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      check/stamp --check/suspects all end human output with a trailing
+      count line; backlinks was the one inconsistency. Additive-only -
+      render_backlinks_json is untouched, D1's JSON-shape lock is not
+      revisited.
+
+  - id: UX-03
+    title: check and stamp --check report problems with no next step
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/UX-03-next-step-hints.md
+    blocked_by: []
+    touches: [reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Human output only, and only when there is a problem to act on - a clean
+      tree or an empty stamp --check report stays self-contained. json/github
+      shapes are untouched (D1). suspects and plain stamp were considered and
+      excluded: neither has a single unambiguous fix command to suggest.
+
+  - id: CLI-02
+    title: subcommand --help has no usage examples
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/CLI-02-help-epilogs.md
+    blocked_by: []
+    touches: [reflock_lib/cli.py, test_reflock.py]
+    note: >-
+      Each subcommand's --help gains an "examples:" epilog section via
+      RawDescriptionHelpFormatter. Help text only - no flag, renderer, or
+      parser_spec()/completion change.
+
+  - id: CLI-03
+    title: bare reflock shows usage instead of live state
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/CLI-03-bare-invocation-defaults-to-check.md
+    blocked_by: []
+    touches: [reflock_lib/cli.py, test_reflock.py]
+    note: >-
+      Fully empty argv now delegates to `check` before argparse ever sees a
+      missing-subcommand error. Scoped tightly: --root with no subcommand
+      still errors, and no other subcommand becomes implicit.
+
+  - id: ID-22
+    title: reflock setup claude
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/ID-22-setup-claude-subcommand.md
+    blocked_by: []
+    touches: [reflock_lib/setup.py, reflock_lib/cli.py, test_reflock.py]
+    note: >-
+      Promotes examples/hooks/reflock-gate.sh from copy-paste material to an
+      idempotent, path-repairing setup command. SessionStart dashboards and
+      Codex/OpenCode support explicitly excluded - no existing integration
+      to promote for either.
+
   - id: DOC-01
     title: the documented pre-commit rev names a tag without the manifest
     source: review 2026-07-28
