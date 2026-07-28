@@ -321,6 +321,21 @@ because the file defining the target wasn't passed in.
 **2. CI (the server backstop).** One job step: `reflock check`. Nonzero exit fails
 the build. Deterministic, cacheable, no secrets.
 
+Three exit codes, and the distinction between the last two is the one CI cares
+about:
+
+| Code | Means |
+|---|---|
+| 0 | every reference checked out clean |
+| 1 | reflock ran and found problems |
+| 2 | reflock could not run as asked — bad flag combination, or a path argument naming nothing in the tree |
+
+A path argument that matches nothing is code 2, not 0. Scoping a job to
+`reflock check docs/` used to keep passing the day `docs/` was renamed, which is
+the exact failure reflock exists to prevent — so a stale invocation now fails
+loudly instead of reporting a clean tree it never looked at. `reflock check .`
+means the whole tree, as it reads.
+
 On GitHub Actions, `check --format github` emits
 [workflow commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions)
 instead of the human report, so each finding lands as an inline annotation on

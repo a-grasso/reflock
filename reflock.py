@@ -451,13 +451,42 @@ def colorize(text: str, verdict: str, enabled: bool) -> str:
     return f"{VERDICT_COLOR[verdict]}{text}{COLOR_RESET}"
 
 
+class ScopeError(Exception):
+    """A path argument names nothing in the tree."""
+
+
 def scoped_files(idx: Index, paths: list[str]) -> list[str]:
+    """Reference *sources* under the requested paths; all of them if none given.
+
+    An argument naming nothing in the tree raises rather than selecting an empty
+    work list: `reflock check docs/` silently passed forever once docs/ was
+    renamed, which is the rot reflock exists to catch (BUG-04). A path that
+    exists but contributes no sources - binary, .reflockignore'd, or a directory
+    of only those - is matched and simply empty, so explicit scoping and
+    .reflockignore do not fight each other.
+    """
+    sources = sorted(f for f in idx.files if f in idx.lines and f not in idx.ignored)
     if not paths:
-        return sorted(f for f in idx.files if f in idx.lines and f not in idx.ignored)
-    want = {os.path.normpath(os.path.relpath(os.path.abspath(p), idx.root)).replace(os.sep, "/")
-            for p in paths}
-    return sorted(f for f in idx.files if f in idx.lines and f not in idx.ignored
-                  and (f in want or any(f.startswith(w + "/") for w in want)))
+        return sources
+    selected: set[str] = set()
+    unmatched = []
+    # realpath on both sides: on macOS a temp dir (and any symlinked checkout)
+    # reaches the process as /var/… but resolves to /private/var/…, so comparing
+    # one resolved path against one unresolved one puts every argument outside
+    # the tree.
+    root = os.path.realpath(idx.root)
+    for p in paths:
+        w = os.path.normpath(os.path.relpath(os.path.realpath(p), root)).replace(os.sep, "/")
+        if w == ".":
+            return sources                      # the tree root, as it reads
+        hits = [f for f in sources if f == w or f.startswith(w + "/")]
+        if hits:
+            selected.update(hits)
+        elif w not in idx.files and w not in idx.dirs:
+            unmatched.append(p)                 # echo the user's spelling
+    if unmatched:
+        raise ScopeError("error: no such path in tree: " + ", ".join(unmatched))
+    return sorted(selected)
 
 
 def render_json(results, problems: int, args) -> int:
@@ -969,7 +998,14 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "needs_index", True) is False:
         return args.fn(args)
     root = repo_root(args.root)
-    return args.fn(build_index(root), args)
+    try:
+        return args.fn(build_index(root), args)
+    except ScopeError as e:
+        # Caught here rather than in each command: every path-scoped command
+        # funnels through one call, and exit 2 keeps "misconfigured invocation"
+        # distinct from 1 ("found problems") for CI.
+        print(e, file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

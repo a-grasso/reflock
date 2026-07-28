@@ -1,0 +1,23 @@
+{
+  "description": "BUG-04 boundary: 'names nothing' must not swallow 'names something with no work in it'. A .reflockignore'd file passed explicitly exists in the tree, so it exits 0 with nothing to report - erroring here would make explicit scoping and .reflockignore fight each other.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["vendor/v.md"],
+      "expect_exit": 0,
+      "expect_contains": ["All references OK."]
+    },
+    {
+      "cmd": "check",
+      "args": ["vendor"],
+      "expect_exit": 0,
+      "expect_contains": ["All references OK."]
+    },
+    {
+      "cmd": "check",
+      "args": ["vendor/nope.md"],
+      "expect_exit": 2,
+      "expect_stderr": ["vendor/nope.md"]
+    }
+  ]
+}
