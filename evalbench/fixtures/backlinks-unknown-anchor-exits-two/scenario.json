@@ -1,0 +1,24 @@
+{
+  "description": "CLI-01: backlinks validated the file half of path#anchor and not the anchor half, so a misspelled anchor reported 'No backlinks' and exited 0 - the answer you act on before editing a section. It is now exit 2, by the same reasoning the README already gave for a missing file. A valid anchor with no referrers is still a real zero.",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md#no-such-anchor"],
+      "expect_exit": 2,
+      "expect_stdout_empty": true,
+      "expect_stderr": ["no anchor '#no-such-anchor' in t.md"]
+    },
+    {
+      "cmd": "backlinks",
+      "args": ["t.md#sec"],
+      "expect_exit": 0,
+      "expect_contains": ["No backlinks to t.md."]
+    },
+    {
+      "cmd": "backlinks",
+      "args": ["t.md"],
+      "expect_exit": 0,
+      "expect_contains": ["a.md:1"]
+    }
+  ]
+}

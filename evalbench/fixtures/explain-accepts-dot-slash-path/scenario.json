@@ -1,0 +1,17 @@
+{
+  "description": "CLI-01: explain resolved its <file>:<line> spec by raw string comparison too, so `./a.md:1` errored. Both spellings explain the same reference, with byte-identical output.",
+  "steps": [
+    {
+      "cmd": "explain",
+      "args": ["a.md:1"],
+      "expect_exit": 0,
+      "expect_contains": ["reference   a.md:1", "resolves to t.md"]
+    },
+    {
+      "cmd": "explain",
+      "args": ["./a.md:1"],
+      "expect_exit": 0,
+      "expect_stdout_same_as_step": 0
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "description": "CLI-01: anchor validation must accept both kinds of anchor. A reflock-anchor: marker span is as valid as a heading slug, so validating against headings alone would have rejected a working reference. locate_anchor answers this and is what explain uses, so the two cannot disagree about what an anchor is.",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md#block"],
+      "expect_exit": 0,
+      "expect_contains": ["a.md:1"]
+    },
+    {
+      "cmd": "backlinks",
+      "args": ["t.md#not-a-block"],
+      "expect_exit": 2,
+      "expect_stderr": ["no anchor '#not-a-block' in t.md"]
+    }
+  ]
+}

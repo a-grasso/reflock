@@ -292,7 +292,7 @@ items:
     source: review 2026-07-28
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/CLI-01-path-forms.md
     blocked_by: [BENCH-01]
     touches: [reflock.py, test_reflock.py, evalbench/fixtures/]

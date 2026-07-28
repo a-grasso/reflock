@@ -487,6 +487,43 @@ class ScopeError(Exception):
     """A path argument names nothing in the tree."""
 
 
+def rel_to_root(idx: Index, arg: str) -> str:
+    """A user-supplied path argument as a repo-relative path.
+
+    Relative to the process CWD, like git and find - not to --root. realpath on
+    both sides so a symlinked checkout, a `./` prefix and a `..` spelling all
+    reduce to the same thing; on macOS a temp dir arrives as /var/… and resolves
+    to /private/var/…, and comparing one resolved path against one unresolved one
+    puts every argument outside the tree.
+
+    Shared by scoped_files and indexed_path so `check`, `stamp`, `suspects`,
+    `backlinks` and `explain` cannot disagree about what a path is (CLI-01).
+    """
+    root = os.path.realpath(idx.root)
+    return os.path.normpath(os.path.relpath(os.path.realpath(arg), root)).replace(os.sep, "/")
+
+
+def indexed_path(idx: Index, arg: str) -> str | None:
+    """One indexed file named by a single-path argument, or None.
+
+    CWD-relative first, then the repo-relative reading - the same
+    relative-first-then-fallback shape D4 uses for wiki-links. The fallback is
+    not a convenience: `check` *prints* repo-relative paths whatever directory it
+    runs in, and pasting `docs/a.md:1` straight into `explain` is the obvious
+    workflow. CWD-only resolution turns that paste into docs/docs/a.md as soon as
+    the user is inside docs/. A command should accept the strings it prints.
+
+    Used by backlinks and explain, which take an *identifier* for one file.
+    scoped_files stays CWD-only: `check docs/` is a path to scope by, where
+    git-like behavior is the whole expectation.
+    """
+    rel = rel_to_root(idx, arg)
+    if rel in idx.files:
+        return rel
+    literal = os.path.normpath(arg).replace(os.sep, "/")
+    return literal if literal in idx.files else None
+
+
 def scoped_files(idx: Index, paths: list[str]) -> list[str]:
     """Reference *sources* under the requested paths; all of them if none given.
 
@@ -504,13 +541,8 @@ def scoped_files(idx: Index, paths: list[str]) -> list[str]:
         return sources
     selected: set[str] = set()
     unmatched = []
-    # realpath on both sides: on macOS a temp dir (and any symlinked checkout)
-    # reaches the process as /var/… but resolves to /private/var/…, so comparing
-    # one resolved path against one unresolved one puts every argument outside
-    # the tree.
-    root = os.path.realpath(idx.root)
     for p in paths:
-        w = os.path.normpath(os.path.relpath(os.path.realpath(p), root)).replace(os.sep, "/")
+        w = rel_to_root(idx, p)
         if w == ".":
             return sources                      # the tree root, as it reads
         hits = [f for f in sources if f == w or f.startswith(w + "/")]
@@ -736,10 +768,17 @@ def cmd_backlinks(idx: Index, args) -> int:
     except FormatConflict as e:
         print(e, file=sys.stderr)
         return 2
-    target_path, _, target_anchor = args.path.partition("#")
+    arg_path, _, target_anchor = args.path.partition("#")
     target_anchor = target_anchor or None
-    if target_path not in idx.files:
-        print(f"error: no such file in index: {target_path}", file=sys.stderr)
+    target_path = indexed_path(idx, arg_path)
+    if target_path is None:
+        print(f"error: no such file in index: {arg_path}", file=sys.stderr)
+        return 2
+    if target_anchor is not None and locate_anchor(idx, target_path, target_anchor)[0] is None:
+        # Same reasoning as the missing-file case: "nothing points at this
+        # section" is the answer you act on before editing that section, so a
+        # misspelled anchor must not be able to produce it.
+        print(f"error: no anchor '#{target_anchor}' in {target_path}", file=sys.stderr)
         return 2
     rows = []
     for rel in scoped_files(idx, []):
@@ -837,9 +876,10 @@ def cmd_explain(idx: Index, args) -> int:
     if not sep or not line_part.isdigit() or int(line_part) < 1:
         print(f"error: invalid <file>:<line> spec: {args.spec}", file=sys.stderr)
         return 2
-    rel, lineno = file_part, int(line_part)
-    if rel not in idx.files:
-        print(f"error: no such file in index: {rel}", file=sys.stderr)
+    lineno = int(line_part)
+    rel = indexed_path(idx, file_part)
+    if rel is None:
+        print(f"error: no such file in index: {file_part}", file=sys.stderr)
         return 2
     lines = idx.lines.get(rel)
     if lines is None or lineno > len(lines):
