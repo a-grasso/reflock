@@ -393,6 +393,20 @@ items:
       shapes are untouched (D1). suspects and plain stamp were considered and
       excluded: neither has a single unambiguous fix command to suggest.
 
+  - id: CLI-02
+    title: subcommand --help has no usage examples
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/CLI-02-help-epilogs.md
+    blocked_by: []
+    touches: [reflock_lib/cli.py, test_reflock.py]
+    note: >-
+      Each subcommand's --help gains an "examples:" epilog section via
+      RawDescriptionHelpFormatter. Help text only - no flag, renderer, or
+      parser_spec()/completion change.
+
   - id: DOC-01
     title: the documented pre-commit rev names a tag without the manifest
     source: review 2026-07-28
