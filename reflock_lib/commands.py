@@ -138,6 +138,10 @@ def render_human(results, problems: int, args) -> int:
             print(f"  {r.src}:{r.line}  {r.target}   [{d}]")
     msg = f"{problems} problem(s)." if problems else "All references OK."
     print(f"\n{colorize(msg, 'DANGLING' if problems else 'OK', color)}")
+    if problems:
+        print("\nRun `reflock explain <file>:<line>` for details on any of the above.")
+        if any(v == "UNSTAMPED" for v, _, _ in results):
+            print("Run `reflock stamp` to fill in UNSTAMPED pins.")
     return 1 if problems else 0
 
 
@@ -313,6 +317,7 @@ def cmd_stamp(idx: Index, args) -> int:
             print(f"  {rel}:{ref.line}  {ref.target}   [{kind}]")
         if report:
             print(f"\n{len(report)} pin(s) would be stamped.")
+            print("\nRun `reflock stamp` to apply.")
             # --warn reports without judging: the exit code is the only
             # difference, so a pre-commit-framework hook can be advisory even
             # though pre-commit itself has no warn-only mode (D6).

@@ -378,6 +378,21 @@ items:
       render_backlinks_json is untouched, D1's JSON-shape lock is not
       revisited.
 
+  - id: UX-03
+    title: check and stamp --check report problems with no next step
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/UX-03-next-step-hints.md
+    blocked_by: []
+    touches: [reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Human output only, and only when there is a problem to act on - a clean
+      tree or an empty stamp --check report stays self-contained. json/github
+      shapes are untouched (D1). suspects and plain stamp were considered and
+      excluded: neither has a single unambiguous fix command to suggest.
+
   - id: DOC-01
     title: the documented pre-commit rev names a tag without the manifest
     source: review 2026-07-28
