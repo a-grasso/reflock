@@ -295,6 +295,14 @@ would be a no-op.
 reflock stamp --check || echo "Some pins are stale; run 'reflock stamp'."
 ```
 
+Add `--warn` and it reports exactly the same thing but always exits 0, for a
+hook or CI step that should inform without blocking. That's the difference
+between the two flags: `--check` answers "would this change anything" with its
+exit code, `--check --warn` answers it only in words.
+```bash
+reflock stamp --check --warn    # same report, never nonzero
+```
+
 If your team already runs the [`pre-commit`](https://pre-commit.com) framework,
 reflock ships a `.pre-commit-hooks.yaml`, so you don't hand-roll either script:
 
@@ -307,16 +315,30 @@ repos:
       - id: reflock-stamp-check
 ```
 
-Both hooks default to the **pre-push** stage rather than pre-commit, for the
-partial-work reason above: a reference whose target lands in the *next* commit
-is correctly `DANGLING`, and blocking that commit is friction you're right to
-resent. `pre-commit` has no warn-only mode - a failing hook blocks whatever
-stage it runs in - so pre-push is how `reflock-stamp-check` stays advisory about
-work in progress while still refusing to let a broken reference leave your
-machine. Install the stage once with `pre-commit install --hook-type pre-push`.
+The two hooks land on different stages, which is the same advisory/enforcing
+split as above:
 
-If you'd rather have the feedback at commit time and accept the friction,
-override the stage per hook:
+| Hook | Runs | Stage | Can it stop you? |
+|---|---|---|---|
+| `reflock-stamp-check` | `stamp --check --warn` | `pre-commit` | never — always exits 0 |
+| `reflock-check` | `check` | `pre-push` | yes |
+
+Install both stages once:
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type pre-push
+```
+
+`reflock-stamp-check` can run at commit time *because* it cannot fail. That
+matters: `pre-commit` has no warn-only mode — a failing hook blocks whatever
+stage it runs in — so an advisory hook has to be advisory in the command it
+invokes, which is what `--warn` is for. You get told about pins that need
+stamping on every commit and are never blocked by one, since a reference whose
+target lands in the *next* commit is correctly `DANGLING` and blocking that is
+friction you're right to resent.
+
+`reflock-check` enforces at push: a broken reference doesn't leave your machine.
+If you'd rather enforce at commit time and accept the friction, override it:
 
 ```yaml
       - id: reflock-check

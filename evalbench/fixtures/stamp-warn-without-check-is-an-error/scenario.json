@@ -1,0 +1,18 @@
+{
+  "description": "NS-03b: plain `stamp` already exits 0, so --warn without --check would imply it did something. It is a usage error, exit 2, and the tree is untouched - a silently-accepted flag on a writing command is the dangerous version of this mistake.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--warn"],
+      "expect_exit": 2,
+      "expect_stdout_empty": true,
+      "expect_stderr": ["--warn requires --check"],
+      "expect_tree_unchanged_since_step": 0
+    }
+  ]
+}

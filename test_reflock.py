@@ -527,6 +527,46 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- NS-03b: --warn, an exit-0 reporting mode ---------------------------
+    def test_check_warn_exits_zero_but_still_reports(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [x](t.md)<!--@-->\n")
+        rc_plain, out_plain, _ = self.run_cmd("stamp", "--check")
+        rc_warn, out_warn, _ = self.run_cmd("stamp", "--check", "--warn")
+        self.assertEqual(1, rc_plain)
+        self.assertEqual(0, rc_warn)
+        self.assertIn("a.md:1", out_warn)
+        self.assertIn("unstamped", out_warn)
+
+    def test_check_warn_stdout_identical_to_check(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [x](t.md)<!--@-->\nAnd [y](t.md)<!--@-->\n")
+        _, out_plain, _ = self.run_cmd("stamp", "--check")
+        _, out_warn, _ = self.run_cmd("stamp", "--check", "--warn")
+        self.assertEqual(out_plain, out_warn,
+                          "--warn changes the exit code, not the report")
+
+    def test_check_warn_on_clean_tree_exits_zero(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [x](t.md)\n")
+        rc, out, _ = self.run_cmd("stamp", "--check", "--warn")
+        self.assertEqual(0, rc)
+        self.assertIn("Nothing to stamp", out)
+
+    def test_warn_without_check_is_an_error(self):
+        self.write("t.md", "# T\n")
+        rc, _, err = self.run_cmd("stamp", "--warn")
+        self.assertEqual(2, rc)
+        self.assertIn("--warn", err)
+        self.assertIn("--check", err)
+
+    def test_check_warn_writes_nothing(self):
+        self.write("t.md", "# T\n")
+        before = b"See [x](t.md)<!--@-->\n"
+        self.write_bytes("a.md", before)
+        self.run_cmd("stamp", "--check", "--warn")
+        self.assertEqual(before, self.read_bytes("a.md"))
+
     # --- PERF-01: one fingerprint per distinct unit --------------------------
     def big_target(self, rel="t.md", body="lorem ipsum dolor sit amet "):
         self.write(rel, "# Title\n\n## Sec\n\n" + (body * 4 + "\n") * 40)
@@ -1501,15 +1541,37 @@ class PreCommitManifestTest(unittest.TestCase):
                 self.assertIn(flag, spec[parts[1]],
                               f"hook {hook['id']} passes {flag!r}, absent from {parts[1]}")
 
-    def test_no_hook_blocks_a_commit_by_default(self):
-        """D6: do not ship a hook that hard-fails a commit by default. pre-commit
-        has no warn-only mode - a failing hook always blocks the stage it runs in
-        - so the only way to honor D6 is to default both hooks to pre-push."""
+    def test_no_hook_that_can_fail_runs_at_pre_commit(self):
+        """D6: do not ship a hook that hard-fails a commit by default.
+
+        NS-03b replaced the proxy this test used to assert - "no hook mentions
+        pre-commit at all" - with the invariant itself. That proxy was only right
+        while every hook could fail: pre-commit has no warn-only mode, so before
+        `stamp --check --warn` existed, pre-push was the only stage that honored
+        D6. Now a hook may run at commit time precisely if it cannot fail, which
+        is what D6 asks for and what DECISIONS.md section 3 describes.
+
+        Strictly stronger than the old assertion: it still forbids `reflock-check`
+        at pre-commit, and it forbids any future blocking hook being added there.
+        """
         for hook in self.hooks:
             self.assertIn("stages", hook, f"hook {hook['id']} does not pin a stage")
-            self.assertNotIn("pre-commit", hook["stages"],
-                             f"hook {hook['id']} would block commits on partial work")
-            self.assertIn("pre-push", hook["stages"])
+            if "pre-commit" in hook["stages"]:
+                self.assertIn("--warn", hook["entry"],
+                              f"hook {hook['id']} runs at pre-commit but can fail, "
+                              f"so it would block a commit on partial work")
+
+    def test_advisory_hook_is_the_one_at_commit_time(self):
+        by_id = {h["id"]: h for h in self.hooks}
+        self.assertIn("pre-commit", by_id["reflock-stamp-check"]["stages"])
+        self.assertIn("--warn", by_id["reflock-stamp-check"]["entry"])
+        self.assertNotIn("pre-commit", by_id["reflock-check"]["stages"])
+        self.assertIn("pre-push", by_id["reflock-check"]["stages"])
+
+    def test_enforcing_hook_does_not_pass_warn(self):
+        by_id = {h["id"]: h for h in self.hooks}
+        self.assertNotIn("--warn", by_id["reflock-check"]["entry"],
+                          "the enforcing gate must be able to fail")
 
     def test_advisory_hook_shows_its_output(self):
         hook = next(h for h in self.hooks if h["id"] == "reflock-stamp-check")

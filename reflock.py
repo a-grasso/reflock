@@ -663,13 +663,22 @@ def plan_stamp(idx: Index, args):
 
 
 def cmd_stamp(idx: Index, args) -> int:
+    warn = getattr(args, "warn", False)
+    if warn and not getattr(args, "check", False):
+        # Plain `stamp` already exits 0, so accepting --warn there would imply it
+        # did something.
+        print("error: --warn requires --check", file=sys.stderr)
+        return 2
     edits_by_rel, report = plan_stamp(idx, args)
     if getattr(args, "check", False):
         for rel, ref, kind, fp in report:
             print(f"  {rel}:{ref.line}  {ref.target}   [{kind}]")
         if report:
             print(f"\n{len(report)} pin(s) would be stamped.")
-            return 1
+            # --warn reports without judging: the exit code is the only
+            # difference, so a pre-commit-framework hook can be advisory even
+            # though pre-commit itself has no warn-only mode (D6).
+            return 0 if warn else 1
         print("\nNothing to stamp.")
         return 0
     changed = 0
@@ -905,6 +914,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--rebless", action="store_true", help="re-hash existing pins too")
     s.add_argument("--check", action="store_true",
                    help="report what stamp would do; write nothing")
+    s.add_argument("--warn", action="store_true",
+                   help="with --check: report but always exit 0 (advisory)")
     s.set_defaults(fn=cmd_stamp)
     sp = sub.add_parser("suspects", help="bare path-shaped tokens that don't resolve")
     sp.add_argument("paths", nargs="*")

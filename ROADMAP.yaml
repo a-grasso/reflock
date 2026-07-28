@@ -168,8 +168,10 @@ items:
       `language: python` / `entry: reflock`. pre-commit's `language: python`
       installs the hook repo as a package to obtain a console script, and
       reflock ships no packaging metadata by design (D3). Both hooks default
-      to `stages: [pre-push]`, which is how D6's "no hook that hard-fails a
-      commit by default" is honored - pre-commit has no warn-only mode.
+      to `stages: [pre-push]`, which was how D6's "no hook that hard-fails a
+      commit by default" was honored - pre-commit has no warn-only mode.
+      Superseded in part by NS-03b: reflock now has an exit-0 reporting mode,
+      so reflock-stamp-check is genuinely advisory and runs at pre-commit.
 
   - id: BENCH-01
     title: evalbench cannot assert stderr or cross-step byte identity
@@ -273,7 +275,7 @@ items:
     source: review 2026-07-28
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/NS-03b-warn-mode.md
     blocked_by: []
     touches: [reflock.py, test_reflock.py, .pre-commit-hooks.yaml, README.md,

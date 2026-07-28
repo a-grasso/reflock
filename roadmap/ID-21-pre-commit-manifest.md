@@ -39,6 +39,15 @@ Manifest specifics:
   the only way to satisfy D6's "do not ship a hook that hard-fails a commit by
   default" while still shipping a hook that enforces. The README documents the
   `stages: [pre-commit]` override.
+
+  **Superseded by [NS-03b](NS-03b-warn-mode.md).** This was right about
+  pre-commit and incomplete about reflock: a hook is only as blocking as the
+  command it runs, and reflock had no exit-0 reporting mode to offer. It does
+  now (`stamp --check --warn`), so `reflock-stamp-check` is genuinely advisory
+  and runs at `pre-commit`, while `reflock-check` keeps enforcing at
+  `pre-push`. D6 is satisfied as written rather than worked around. Read the
+  paragraph above as the reasoning that held until `--warn` existed, not as the
+  final word.
 - `files:` restricted to text types reflock actually parses, so the hook does not
   fire on every binary asset.
 - `pass_filenames` - decide deliberately and state why in the PR. reflock's
