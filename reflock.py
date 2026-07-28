@@ -52,7 +52,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 FP_LEN = 8  # hex chars of sha256; 32 bits — a missed drift is ~1 in 4e9
 
