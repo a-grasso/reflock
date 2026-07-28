@@ -419,10 +419,12 @@ default format.
 **3. The Stop hook (the agent).** The one people forget. When an AI coding agent
 (e.g. Claude Code) edits your docs, it can *declare itself done* with references
 broken. A **Stop hook** blocks the agent from ending its turn until `reflock check`
-is clean — and feeds the failure back so the agent fixes it before finishing. See
-[`examples/hooks/`](examples/hooks/). The key subtlety is the loop-guard: honour
-the runner's "already retrying" flag so a genuinely unfixable state can't wedge
-the agent.
+is clean — and feeds the failure back so the agent fixes it before finishing. Run
+`reflock setup claude` to install and repair it (idempotent - safe to re-run after
+moving or reinstalling reflock), or see [`examples/hooks/`](examples/hooks/) for
+the raw files if you'd rather wire it by hand. The key subtlety is the loop-guard:
+honour the runner's "already retrying" flag so a genuinely unfixable state can't
+wedge the agent.
 
 ## Why the two-layer split matters
 
