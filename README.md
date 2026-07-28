@@ -194,6 +194,7 @@ REFLOCK_SRC=~/Projects/reflock ./install.sh
 Then, from any repo:
 
 ```bash
+reflock                # same as `reflock check` - the default with no subcommand
 reflock check          # report problems (exit 1 if any)
 reflock stamp          # fill empty pins
 reflock stamp --rebless doc/DESIGN.md   # accept current target state for these refs

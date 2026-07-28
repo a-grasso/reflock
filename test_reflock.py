@@ -93,6 +93,52 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         self.assertEqual(out.getvalue().strip(), f"reflock {reflock.__version__}")
 
+    # --- CLI-03: bare invocation defaults to check --------------------------
+    def test_bare_invocation_with_root_flag_still_requires_a_subcommand(self):
+        """--root + no subcommand is still a usage error (CLI-03 is scoped to
+        *fully* empty argv, not "no subcommand however it's spelled")."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            reflock.main(["--root", self.d])
+        self.assertEqual(2, cm.exception.code)
+        self.assertIn("cmd", err.getvalue())
+
+    def test_main_empty_list_runs_check_clean(self):
+        cwd = os.getcwd()
+        os.chdir(self.d)
+        try:
+            self.write("t.md", "# H\n\n## Real\n\nbody\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = reflock.main([])
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(0, rc)
+        self.assertEqual("\nAll references OK.\n", out.getvalue())
+
+    def test_main_empty_list_runs_check_dirty(self):
+        cwd = os.getcwd()
+        os.chdir(self.d)
+        try:
+            self.write("a.md", "See [x](missing.md).\n")
+            out_bare = io.StringIO()
+            with contextlib.redirect_stdout(out_bare):
+                rc_bare = reflock.main([])
+            out_check = io.StringIO()
+            with contextlib.redirect_stdout(out_check):
+                rc_check = reflock.main(["check"])
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(rc_check, rc_bare)
+        self.assertEqual(out_check.getvalue(), out_bare.getvalue())
+
+    def test_version_and_help_unaffected_by_bare_default(self):
+        out = io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(out):
+            reflock.main(["--version"])
+        self.assertEqual(0, cm.exception.code)
+        self.assertEqual(out.getvalue().strip(), f"reflock {reflock.__version__}")
+
     def test_slugify_matches_github_double_hyphen(self):
         # GitHub replaces each space independently and keeps consecutive
         # hyphens; punctuation stripped between words leaves them behind.
