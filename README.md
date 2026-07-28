@@ -18,6 +18,8 @@ DRIFTED (1)
   doc/DESIGN.md:52   ../adr/0011-….md#decision   [pinned @a1b2c3d4, now @9f0e1d2c]
 
 2 problem(s).
+
+Run `reflock explain <file>:<line>` for details on any of the above.
 ```
 
 ---
@@ -214,6 +216,12 @@ fingerprints normally, since that direction is only a read.
 `--no-color` or set `NO_COLOR` (https://no-color.org) to turn that off, or pipe
 output anywhere and it's plain text automatically.
 
+Human output with at least one problem ends with a next-step hint pointing at
+`explain`, and a second one pointing at `stamp` if any finding is `UNSTAMPED`.
+A clean tree stays exactly `"All references OK."` - no hint on the path that
+needs none. `--format json`/`--format github` never carry hints; they're for
+callers that already know what they're doing next.
+
 `check --format <human|json|github>` selects the output format; `human` is the
 default. `--json` is a retained alias for `--format json`. Passing both is
 fine as long as they agree; passing `--json` with a conflicting `--format`
@@ -318,7 +326,8 @@ If you'd rather keep pre-commit advisory and enforce at pre-push, use
 `stamp --check` there instead of `check`: it computes exactly the edits
 `stamp` would make - a pin that's opted in but unstamped, or one whose hash
 would be rewritten - reports them, and writes nothing. Exit 0 means `stamp`
-would be a no-op.
+would be a no-op. When it isn't, output ends with a "Run `reflock stamp` to
+apply." hint - `"Nothing to stamp."` gets none, needing none.
 ```bash
 reflock stamp --check || echo "Some pins are stale; run 'reflock stamp'."
 ```

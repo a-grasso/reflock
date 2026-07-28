@@ -1,0 +1,11 @@
+{
+  "description": "UX-03: stamp --check on a clean tree stays self-contained - no hint appended",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": ["--check"],
+      "expect_exit": 0,
+      "expect_not_contains": ["reflock"]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "description": "UX-03: a DANGLING finding gets an explain next-step hint",
+  "steps": [
+    {
+      "cmd": "check",
+      "expect_exit": 1,
+      "expect_contains": ["Run `reflock explain <file>:<line>` for details on any of the above."],
+      "expect_not_contains": ["Run `reflock stamp` to fill in UNSTAMPED pins."]
+    }
+  ]
+}

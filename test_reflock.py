@@ -1425,6 +1425,83 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual("", err)
         self.assertIn("nope.md", json.loads(out)["error"])
 
+    # --- UX-03: next-step hints ---------------------------------------------
+    EXPLAIN_HINT = "Run `reflock explain <file>:<line>` for details on any of the above."
+    STAMP_HINT_FOR_CHECK = "Run `reflock stamp` to fill in UNSTAMPED pins."
+    STAMP_HINT_FOR_STAMP_CHECK = "Run `reflock stamp` to apply."
+
+    def test_check_hints_explain_on_dangling(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, out = self.run_check()
+        self.assertEqual(1, out.count(self.EXPLAIN_HINT), out)
+        self.assertNotIn(self.STAMP_HINT_FOR_CHECK, out)
+
+    def test_check_hints_stamp_on_unstamped(self):
+        self.write("t.md", "# H\n\nbody\n")
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        rc, out = self.run_check()
+        self.assertEqual(1, out.count(self.EXPLAIN_HINT), out)
+        self.assertEqual(1, out.count(self.STAMP_HINT_FOR_CHECK), out)
+
+    def test_check_hints_stamp_appears_once_for_multiple_unstamped(self):
+        self.write("t.md", "# H\n\nbody\n")
+        self.write("a.md", "See [x](t.md)<!--@-->.\nSee [y](t.md)<!--@-->.\n")
+        rc, out = self.run_check()
+        self.assertEqual(1, out.count(self.STAMP_HINT_FOR_CHECK), out)
+
+    def test_check_clean_tree_has_no_hints(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        rc, out = self.run_check()
+        self.assertEqual(0, rc)
+        self.assertNotIn("reflock", out)
+        self.assertEqual("\nAll references OK.\n", out)
+
+    def test_check_format_json_unaffected_by_hints(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, findings = self.check_json()
+        self.assertEqual(1, rc)
+        self.assertEqual([{"verdict": "DANGLING", "file": "a.md", "line": 1,
+                            "target": "missing.md", "detail": "no such file: missing.md"}],
+                          findings)
+
+    def test_check_format_github_unaffected_by_hints(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "check", "--format", "github"])
+        out = buf.getvalue()
+        self.assertNotIn("Run `reflock", out)
+
+    def test_stamp_check_hints_apply(self):
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        self.write("t.md", "# T\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "stamp", "--check"])
+        self.assertIn(self.STAMP_HINT_FOR_STAMP_CHECK, buf.getvalue())
+
+    def test_stamp_check_warn_hints_apply_too(self):
+        """--warn only changes the exit code; stdout (hints included) matches
+        the non-warn run - the existing stdout-parity invariant, re-asserted."""
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        self.write("t.md", "# T\n")
+        buf1 = io.StringIO()
+        with contextlib.redirect_stdout(buf1):
+            reflock.main(["--root", self.d, "stamp", "--check"])
+        buf2 = io.StringIO()
+        with contextlib.redirect_stdout(buf2):
+            reflock.main(["--root", self.d, "stamp", "--check", "--warn"])
+        self.assertEqual(buf1.getvalue(), buf2.getvalue())
+        self.assertIn(self.STAMP_HINT_FOR_STAMP_CHECK, buf1.getvalue())
+
+    def test_stamp_check_nothing_has_no_hint(self):
+        self.write("t.md", "# T\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "stamp", "--check"])
+        out = buf.getvalue()
+        self.assertEqual("\nNothing to stamp.\n", out)
+
     # --- -q/--quiet --------------------------------------------------------
     def test_quiet_clean_tree_is_silent(self):
         self.write("t.md", "# H\n\n## Real\n\nbody\n")
