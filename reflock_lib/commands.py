@@ -356,6 +356,7 @@ def render_backlinks_human(rows, target: str, args) -> int:
         return 0
     for rel, line, tgt, pin in rows:
         print(f"{rel}:{line}  {tgt}  {pin}")
+    print(f"\n{len(rows)} backlink(s).")
     return 0
 
 

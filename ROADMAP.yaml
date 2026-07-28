@@ -363,6 +363,21 @@ items:
       caught inside each command that can raise it instead of once in
       cli.py:main, so the catch site knows the command's resolved format.
 
+  - id: UX-02
+    title: backlinks human output has no total count
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/UX-02-backlinks-count-line.md
+    blocked_by: []
+    touches: [reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      check/stamp --check/suspects all end human output with a trailing
+      count line; backlinks was the one inconsistency. Additive-only -
+      render_backlinks_json is untouched, D1's JSON-shape lock is not
+      revisited.
+
   - id: DOC-01
     title: the documented pre-commit rev names a tag without the manifest
     source: review 2026-07-28

@@ -1750,6 +1750,35 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("no backlinks", out.lower())
 
+    def test_backlinks_none_has_no_trailing_count_line(self):
+        self.write("t.md", "# Title\n")
+        rc, out, _ = self.run_backlinks("t.md")
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "No backlinks to t.md.\n")
+
+    def test_backlinks_human_ends_with_count_line(self):
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\n")
+        rc, out, _ = self.run_backlinks("t.md")
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.endswith("\n\n1 backlink(s).\n"), out)
+
+    def test_backlinks_human_count_matches_row_count(self):
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\n")
+        self.write("b.md", "See [y](t.md).\n")
+        rc, out, _ = self.run_backlinks("t.md")
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.endswith("\n\n2 backlink(s).\n"), out)
+
+    def test_backlinks_format_json_unchanged_by_count_line(self):
+        """The human renderer gaining a count line must not leak into json."""
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\n")
+        rc, rows, _ = self.backlinks_json("t.md")
+        self.assertEqual(rc, 0)
+        self.assertEqual(rows, [{"file": "a.md", "line": 1, "target": "t.md", "pin": "unpinned"}])
+
     def test_backlinks_unknown_path_exits_nonzero(self):
         rc, out, err = self.run_backlinks("nope.md")
         self.assertNotEqual(rc, 0)
