@@ -22,10 +22,9 @@ Distributes as a single dependency-free Python file (stdlib only).
 - **Test:** `just test` (`python3 -m unittest -v test_reflock`)
 - **Bench:** `just bench` (`python3 evalbench/run_bench.py`)
 - **Gate (all of the above except suspects):** `just gate`
-- **Release:** bump `__version__` in `reflock_lib/__init__.py` and the README
-  pre-commit `rev:` pin to match (a test enforces they agree), commit, then
-  `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`. `.github/workflows/release.yml`
-  takes it from there: GitHub release + Homebrew tap formula (see its header comment).
+- **Release:** `just release X.Y.Z` - bumps `__version__` and the README pre-commit
+  `rev:` pin, gates, commits, tags, and pushes. `.github/workflows/release.yml` takes it
+  from there: GitHub release + Homebrew tap formula (see its header comment).
 - **Conventions:** stdlib-only Python; no runtime dependencies. `install.sh` symlinks
   `reflock.py` onto PATH, so the single-file entry point must keep working from any
   checkout location (see `reflock_lib/AGENTS.md` for the symlink-resolution constraint
