@@ -1,0 +1,12 @@
+{
+  "description": "BUG-07: backlinks --format json puts an unknown-path error on stdout as {\"error\": ...}",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["nope.md", "--format", "json"],
+      "expect_exit": 2,
+      "expect_json": {"error": "no such file in index: nope.md"},
+      "expect_stderr_empty": true
+    }
+  ]
+}

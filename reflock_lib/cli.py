@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
 from reflock_lib import __version__
 from reflock_lib.engine import build_index, repo_root
@@ -10,7 +9,6 @@ from reflock_lib.commands import (
     BACKLINKS_RENDERERS,
     EXPLAIN_RENDERERS,
     RENDERERS,
-    ScopeError,
     UNIT_PREVIEW_LINES,
     cmd_backlinks,
     cmd_check,
@@ -247,11 +245,4 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "needs_index", True) is False:
         return args.fn(args)
     root = repo_root(args.root)
-    try:
-        return args.fn(build_index(root), args)
-    except ScopeError as e:
-        # Caught here rather than in each command: every path-scoped command
-        # funnels through one call, and exit 2 keeps "misconfigured invocation"
-        # distinct from 1 ("found problems") for CI.
-        print(e, file=sys.stderr)
-        return 2
+    return args.fn(build_index(root), args)

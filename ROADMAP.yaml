@@ -346,6 +346,23 @@ items:
       still scans raw lines, so a path named in backticks in prose is a
       suspect. Strictly fewer false positives, which is D2's own rationale.
 
+  - id: BUG-07
+    title: usage errors ignore --format/--json
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/BUG-07-error-format-leak.md
+    blocked_by: []
+    touches: [reflock_lib/commands.py, reflock_lib/cli.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Every usage error printed plain text to stderr regardless of --format,
+      so a caller that asked for --format json/github got nothing structured
+      on stdout when a command failed. render_error() is the error-path
+      counterpart to the existing RENDERERS table (D1); ScopeError is now
+      caught inside each command that can raise it instead of once in
+      cli.py:main, so the catch site knows the command's resolved format.
+
   - id: DOC-01
     title: the documented pre-commit rev names a tag without the manifest
     source: review 2026-07-28

@@ -221,6 +221,14 @@ exits nonzero with an error naming both flags. `github` emits GitHub Actions
 inline annotations - see [Three gates, three trust boundaries](#three-gates-three-trust-boundaries)
 below for the CI usage.
 
+A usage error (an unmatched path, a bad `explain` spec, an unknown `backlinks`
+target) is rendered in the same format that was requested: `--format json`
+prints `{"error": "..."}` on stdout, `--format github` prints one
+`::error::` annotation on stdout, and the default `human` format keeps
+printing `error: ...` to stderr. `stamp` and `suspects` have no `--format`
+flag, so their errors are always the plain stderr form (`suspects --json`'s
+pre-existing flag is the one exception - its errors follow `--json` too).
+
 `check -q` / `check --quiet` prints nothing on success; on failure it prints
 one summary line - `reflock: 1 of 137 references failed` - to **stderr** and
 exits nonzero, for a CI log that only wants to hear from reflock when
