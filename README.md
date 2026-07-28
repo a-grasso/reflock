@@ -242,7 +242,13 @@ referring file and line, the target as written, and its pin state
 unpinned reference won't notice your edit. A path with no backlinks prints a
 clear "no backlinks" line and exits 0; a path absent from the index exits
 nonzero, since silently reporting zero backlinks for a typo'd filename would
-mislead. It's read-only and supports `--format <human|json>` per the same
+mislead. An `#anchor` that resolves to neither a heading nor a
+`reflock-anchor:` span exits nonzero for the same reason — "nothing points at
+this section" is precisely the answer you act on before rewriting that section,
+so a typo must not be able to produce it. `backlinks` and `explain` both accept
+any spelling of a path that names an indexed file: cwd-relative, `./`-prefixed,
+absolute, or the repo-relative form `check` prints, so you can paste a
+`file:line` straight out of a `check` report from any directory. It's read-only and supports `--format <human|json>` per the same
 renderer `check` uses; the JSON shape is a list of
 `{"file", "line", "target", "pin"}` objects.
 

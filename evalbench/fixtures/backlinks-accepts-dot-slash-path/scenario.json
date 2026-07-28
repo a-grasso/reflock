@@ -1,0 +1,17 @@
+{
+  "description": "CLI-01: backlinks compared its raw argument against the index, so `./t.md` - which shell completion produces - errored while `t.md` worked. Both spellings now name the same file and produce byte-identical output.",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md"],
+      "expect_exit": 0,
+      "expect_contains": ["a.md:1"]
+    },
+    {
+      "cmd": "backlinks",
+      "args": ["./t.md"],
+      "expect_exit": 0,
+      "expect_stdout_same_as_step": 0
+    }
+  ]
+}

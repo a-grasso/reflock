@@ -527,6 +527,102 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- CLI-01: one notion of a path argument -------------------------------
+    def in_dir(self, sub, *argv):
+        """Run reflock with the CWD inside the tree, as a user would."""
+        cwd = os.getcwd()
+        try:
+            os.chdir(os.path.join(self.d, sub) if sub else self.d)
+            return self.run_cmd(*argv)
+        finally:
+            os.chdir(cwd)
+
+    def setup_docs_tree(self):
+        self.write("docs/t.md", "# Title\n\n## Sec\n\nbody\n")
+        self.write("docs/a.md", "See [x](t.md).\n")
+
+    def test_backlinks_accepts_dot_slash_and_absolute_and_subdir_paths(self):
+        self.setup_docs_tree()
+        _, canonical, _ = self.run_cmd("backlinks", "docs/t.md")
+        self.assertIn("docs/a.md:1", canonical)
+        for label, args, sub in (
+            ("./ prefix", ("backlinks", "./docs/t.md"), None),
+            ("absolute", ("backlinks", self.at("docs/t.md")), None),
+            ("from subdir", ("backlinks", "t.md"), "docs"),
+        ):
+            rc, out, err = self.in_dir(sub, *args)
+            self.assertEqual(0, rc, f"{label}: {err}")
+            self.assertEqual(canonical, out, f"{label} disagreed with the canonical form")
+
+    def test_explain_accepts_dot_slash_and_absolute_and_subdir_paths(self):
+        self.setup_docs_tree()
+        _, canonical, _ = self.run_cmd("explain", "docs/a.md:1")
+        self.assertIn("docs/a.md:1", canonical)
+        for label, spec, sub in (
+            ("./ prefix", "./docs/a.md:1", None),
+            ("absolute", self.at("docs/a.md") + ":1", None),
+            ("from subdir", "a.md:1", "docs"),
+        ):
+            rc, out, err = self.in_dir(sub, "explain", spec)
+            self.assertEqual(0, rc, f"{label}: {err}")
+            self.assertEqual(canonical, out, f"{label} disagreed with the canonical form")
+
+    def test_backlinks_unknown_anchor_exits_two(self):
+        self.setup_docs_tree()
+        rc, out, err = self.run_cmd("backlinks", "docs/t.md#no-such-anchor")
+        self.assertEqual(2, rc)
+        self.assertIn("no-such-anchor", err)
+        self.assertEqual("", out)
+
+    def test_backlinks_valid_anchor_with_no_referrers_exits_zero(self):
+        self.setup_docs_tree()
+        rc, out, err = self.run_cmd("backlinks", "docs/t.md#sec")
+        self.assertEqual(0, rc, err)
+        self.assertIn("No backlinks", out)
+
+    def test_backlinks_accepts_marker_span_anchor(self):
+        self.write("t.md", "intro\n<!-- reflock-anchor: block -->\nheld\n"
+                            "<!-- reflock-anchor-end: block -->\n")
+        self.write("a.md", "See [x](t.md#block).\n")
+        rc, out, err = self.run_cmd("backlinks", "t.md#block")
+        self.assertEqual(0, rc, err)
+        self.assertIn("a.md:1", out)
+
+    def test_backlinks_unknown_path_still_exits_two(self):
+        self.setup_docs_tree()
+        rc, _, err = self.run_cmd("backlinks", "docs/nope.md")
+        self.assertEqual(2, rc)
+        self.assertIn("nope.md", err)
+
+    def test_repo_relative_path_works_from_a_subdirectory(self):
+        """check prints repo-relative paths whatever directory it runs in, so
+        pasting one into explain must work from a subdirectory too."""
+        self.setup_docs_tree()
+        rc, out, err = self.in_dir("docs", "explain", "docs/a.md:1")
+        self.assertEqual(0, rc, err)
+        self.assertIn("docs/a.md:1", out)
+        rc, out, err = self.in_dir("docs", "backlinks", "docs/t.md")
+        self.assertEqual(0, rc, err)
+        self.assertIn("docs/a.md:1", out)
+
+    def test_cwd_relative_wins_over_repo_relative_on_collision(self):
+        self.write("docs/t.md", "# Outer\n")
+        self.write("docs/docs/t.md", "# Inner\n")
+        self.write("docs/a.md", "See [x](docs/t.md).\n")   # -> docs/docs/t.md
+        rc, out, err = self.in_dir("docs", "backlinks", "docs/t.md")
+        self.assertEqual(0, rc, err)
+        self.assertIn("docs/a.md:1", out,
+                      "the CWD-relative reading (docs/docs/t.md) must win")
+
+    def test_path_normalization_is_shared(self):
+        """scoped_files and the single-path commands must agree on a spelling."""
+        self.setup_docs_tree()
+        idx = reflock.build_index(self.d)
+        self.assertEqual(["docs/a.md"],
+                          reflock.scoped_files(idx, [self.at("./docs/a.md")]))
+        self.assertEqual("docs/a.md",
+                          reflock.indexed_path(idx, self.at("./docs/a.md")))
+
     # --- NS-03b: --warn, an exit-0 reporting mode ---------------------------
     def test_check_warn_exits_zero_but_still_reports(self):
         self.write("t.md", "# T\n")
