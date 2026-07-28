@@ -527,6 +527,50 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- NIT-01: one owner for reference ordering ---------------------------
+    MIXED_LINE = "See [[wiki]] then [inline](t.md) then <!-- REF: t.md -->\n"
+
+    def test_parse_refs_returns_column_order_across_kinds(self):
+        self.write("wiki.md", "# Wiki\n")
+        self.write("t.md", "# T\n")
+        self.write("a.md", self.MIXED_LINE)
+        idx = reflock.build_index(self.d)
+        refs = reflock.parse_refs(idx, "a.md")
+        cols = [r.col for r in refs]
+        self.assertEqual(sorted(cols), cols,
+                          f"references not left-to-right: {[(r.col, r.target) for r in refs]}")
+
+    def test_check_json_findings_are_in_column_order(self):
+        self.write("wiki.md", "# Wiki\n")
+        self.write("t.md", "# T\n")
+        self.write("a.md", self.MIXED_LINE)
+        _, findings = self.check_json("--verbose")
+        one_line = [f for f in findings if f["file"] == "a.md" and f["line"] == 1]
+        self.assertEqual(3, len(one_line))
+        self.assertEqual(["wiki", "t.md", "t.md"], [f["target"] for f in one_line])
+
+    def test_explain_and_check_agree_on_order(self):
+        """The point is that they agree, so they are asserted against each other."""
+        self.write("wiki.md", "# Wiki\n")
+        self.write("t.md", "# T\n")
+        self.write("a.md", self.MIXED_LINE)
+        _, findings = self.check_json("--verbose")
+        check_order = [f["target"] for f in findings
+                       if f["file"] == "a.md" and f["line"] == 1]
+        _, out, _ = self.run_cmd("explain", "a.md:1", "--format", "json")
+        self.assertEqual(check_order, [e["target"] for e in json.loads(out)])
+
+    def test_mixed_line_reference_count_and_verdicts_unchanged(self):
+        self.write("wiki.md", "# Wiki\n")
+        self.write("t.md", "# T\n")
+        self.write("a.md", self.MIXED_LINE)
+        self.assertEqual(["OK", "OK", "OK"], [v for v, _ in self.verdicts("a.md")])
+
+    def test_unit_text_annotation_does_not_claim_list(self):
+        annotation = reflock.unit_text.__annotations__["return"]
+        self.assertNotIn("list", annotation,
+                          f"unit_text never returns a list, but says {annotation!r}")
+
     # --- BUG-06: suspects honours the code-span exemption too ---------------
     def suspects_hits(self, *args):
         buf = io.StringIO()
