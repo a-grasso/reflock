@@ -1,14 +1,12 @@
 {
-  "description": "check -q on a clean tree exits 0 and prints nothing to stdout.",
+  "description": "check -q on a clean tree exits 0 and prints nothing at all - both streams exactly empty, not merely free of the words the report would have used.",
   "steps": [
     {
       "cmd": "check",
       "args": ["-q"],
       "expect_exit": 0,
-      "expect_not_contains": [
-        "OK",
-        "problem"
-      ]
+      "expect_stdout_empty": true,
+      "expect_stderr_empty": true
     }
   ]
 }

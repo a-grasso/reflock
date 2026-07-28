@@ -1150,5 +1150,136 @@ class PreCommitManifestTest(unittest.TestCase):
                              f"hook {hook['id']} must run over the whole tree")
 
 
+_bench_spec = importlib.util.spec_from_file_location(
+    "run_bench", os.path.join(REPO_ROOT, "evalbench", "run_bench.py"))
+run_bench = importlib.util.module_from_spec(_bench_spec)
+_bench_spec.loader.exec_module(run_bench)
+
+
+class BenchHarnessTest(unittest.TestCase):
+    """BENCH-01: the bench harness is code too. Its own assertions have to fail
+    when they should, or a fixture reports PASS having checked nothing."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        with open(os.path.join(self.d, "t.md"), "w") as fh:
+            fh.write("# Title\n\nbody\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def write(self, rel, text):
+        with open(os.path.join(self.d, rel), "w") as fh:
+            fh.write(text)
+
+    def run_steps(self, *steps):
+        """Run steps through the harness the way run_fixture does, returning the
+        failure list for the final step."""
+        ctx = run_bench.StepContext()
+        fails = []
+        for step in steps:
+            fails = run_bench.check_step(self.d, step, ctx)
+        return fails
+
+    # --- 1. unknown keys are an error ---------------------------------------
+    def test_unknown_step_key_fails_and_is_named(self):
+        fails = self.run_steps({"cmd": "check", "expect_containss": ["never matches"]})
+        self.assertTrue(fails, "a typo'd assertion key must not pass silently")
+        self.assertIn("expect_containss", " ".join(fails))
+
+    def test_every_documented_key_is_accepted(self):
+        """Guards against a validation set that drifts from the documented one."""
+        for key in ("write", "cmd", "args", "expect_exit", "expect_json",
+                    "expect_contains", "expect_not_contains", "expect_file_regex",
+                    "expect_stderr", "expect_stderr_not_contains",
+                    "expect_stderr_empty", "expect_stdout_empty",
+                    "expect_stdout_same_as_step",
+                    "expect_tree_unchanged_since_step"):
+            self.assertIn(key, run_bench.STEP_KEYS, f"{key} documented but not accepted")
+
+    # --- 2. stream assertions ----------------------------------------------
+    def test_expect_stderr_passes_on_match(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "args": ["-q"], "expect_stderr": ["1 of 1 references failed"]}))
+
+    def test_expect_stderr_fails_on_miss(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        fails = self.run_steps(
+            {"cmd": "check", "args": ["-q"], "expect_stderr": ["not in the output"]})
+        self.assertTrue(fails)
+        self.assertIn("stderr", " ".join(fails))
+
+    def test_expect_stderr_empty_fails_when_stderr_written(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        fails = self.run_steps(
+            {"cmd": "check", "args": ["-q"], "expect_stderr_empty": True})
+        self.assertTrue(fails, "-q on a failing tree writes a summary to stderr")
+
+    def test_expect_stderr_empty_passes_on_clean_run(self):
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "expect_stderr_empty": True}))
+
+    def test_expect_stdout_empty_passes_when_quiet_and_clean(self):
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "args": ["-q"], "expect_stdout_empty": True}))
+
+    def test_expect_stdout_empty_fails_when_anything_printed(self):
+        fails = self.run_steps({"cmd": "check", "expect_stdout_empty": True})
+        self.assertTrue(fails, "the default human report prints a summary line")
+
+    def test_expect_stderr_not_contains(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "expect_stderr_not_contains": ["Traceback"]}))
+        fails = self.run_steps(
+            {"cmd": "check", "args": ["-q"], "expect_stderr_not_contains": ["references failed"]})
+        self.assertTrue(fails)
+
+    # --- 3. cross-step byte identity ---------------------------------------
+    def test_stdout_same_as_step_passes_for_identical_invocations(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "args": []},
+            {"cmd": "check", "args": ["--format", "human"],
+             "expect_stdout_same_as_step": 0}))
+
+    def test_stdout_same_as_step_fails_when_output_differs(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        fails = self.run_steps(
+            {"cmd": "check", "args": []},
+            {"cmd": "check", "args": ["--format", "json"],
+             "expect_stdout_same_as_step": 0})
+        self.assertTrue(fails)
+
+    def test_tree_unchanged_passes_after_read_only_command(self):
+        self.write("a.md", "See [x](t.md)<!--@-->\n")
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "args": []},
+            {"cmd": "stamp", "args": ["--check"],
+             "expect_tree_unchanged_since_step": 0}))
+
+    def test_tree_unchanged_fails_after_a_write(self):
+        self.write("a.md", "See [x](t.md)<!--@-->\n")
+        fails = self.run_steps(
+            {"cmd": "check", "args": []},
+            {"cmd": "stamp", "args": [], "expect_tree_unchanged_since_step": 0})
+        self.assertTrue(fails, "stamp rewrote a.md; the assertion must catch it")
+        self.assertIn("a.md", " ".join(fails))
+
+    def test_tree_unchanged_detects_an_added_file(self):
+        self.assertTrue(self.run_steps(
+            {"cmd": "check", "args": []},
+            {"cmd": "check", "args": [], "write": {"new.md": "# New\n"},
+             "expect_tree_unchanged_since_step": 0}))
+
+    def test_forward_step_reference_is_a_fixture_error(self):
+        for spec in ({"expect_stdout_same_as_step": 0},
+                     {"expect_tree_unchanged_since_step": 1}):
+            step = {"cmd": "check", "args": [], **spec}
+            fails = self.run_steps(step)
+            self.assertTrue(fails, f"{spec} refers to a step that has not run")
+
+
 if __name__ == "__main__":
     unittest.main()
