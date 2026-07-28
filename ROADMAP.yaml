@@ -351,10 +351,11 @@ items:
     source: review 2026-07-28
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/DOC-01-precommit-rev.md
     blocked_by: [NS-03b]
-    touches: [README.md, reflock.py, test_reflock.py]
+    touches: [README.md, reflock.py, test_reflock.py,
+              .github/workflows/release.yml]
     note: >-
       README pins `rev: v0.1.0`; .pre-commit-hooks.yaml exists in no tag
       (v0.1.0..v0.1.4) nor on main, so the documented config fails with

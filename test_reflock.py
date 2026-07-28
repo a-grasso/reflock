@@ -1871,6 +1871,40 @@ run_bench = importlib.util.module_from_spec(_bench_spec)
 _bench_spec.loader.exec_module(run_bench)
 
 
+class VersionConsistencyTest(unittest.TestCase):
+    """DOC-01: the README told adopters to pin `rev: v0.1.0`, a tag that does not
+    contain .pre-commit-hooks.yaml - so ID-21's whole deliverable was unreachable
+    by the only instructions given for reaching it. These tie the version facts
+    together so the class of defect cannot recur silently."""
+
+    def setUp(self):
+        with open(os.path.join(REPO_ROOT, "README.md"), encoding="utf-8") as fh:
+            self.readme = fh.read()
+
+    def test_readme_precommit_rev_matches_version(self):
+        revs = re.findall(r"^\s*rev:\s*v(\d+\.\d+\.\d+)\s*$", self.readme, re.M)
+        self.assertTrue(revs, "README quotes no pre-commit rev: to check")
+        for rev in revs:
+            self.assertEqual(reflock.__version__, rev,
+                              "the documented pre-commit rev must name the release "
+                              "that contains .pre-commit-hooks.yaml")
+
+    def test_version_flag_prints_the_module_version(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit):
+            reflock.main(["--version"])
+        self.assertEqual(f"reflock {reflock.__version__}", buf.getvalue().strip())
+
+    def test_release_workflow_guards_tag_against_version(self):
+        """release.yml takes the version from the pushed tag, so without this
+        check a tag could ship a formula whose reflock --version disagrees."""
+        with open(os.path.join(REPO_ROOT, ".github", "workflows", "release.yml"),
+                   encoding="utf-8") as fh:
+            wf = fh.read()
+        self.assertIn("__version__", wf,
+                      "release.yml must refuse a tag that disagrees with __version__")
+
+
 class BenchHarnessTest(unittest.TestCase):
     """BENCH-01: the bench harness is code too. Its own assertions have to fail
     when they should, or a fixture reports PASS having checked nothing."""
