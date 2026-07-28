@@ -297,11 +297,16 @@ pins over a lockfile (DECISIONS.md #1); this entry is how it gets paid down.
 ## Language & runtime: when Python stops being the right host *(Far, cross-cutting)*
 
 Not a capability - a constraint that sits underneath several of the entries
-above. reflock today is 465 lines of stdlib-only Python in a single file, and
-that legibility is part of the product argument: you can read the whole tool
-in one sitting and satisfy yourself that there is no model in the hot path.
-Trading it away needs a reason, and several of the northstars above are that
-reason.
+above. reflock today is ~1,350 lines of stdlib-only Python: `reflock.py`, the
+single executable entry point install.sh symlinks onto PATH and the
+pre-commit manifest invokes directly, plus `reflock_lib/`, a handful of small
+modules (grammar, engine, commands, cli) it re-exports from since outgrowing
+one file. Zero dependencies and zero model calls in the hot path are the load-
+bearing halves of that legibility argument, and the split doesn't touch
+either; what it gives up is literally-one-file, in exchange for each concern
+being readable on its own rather than scrolled past inside twelve hundred
+lines of everything else. Trading the *zero-dependency, no-model* half away
+needs a reason, and several of the northstars above are that reason.
 
 **Measured baseline (117 tracked files, this repo):** `reflock check` takes
 ~0.07s user + 0.04s sys but ~0.5s wall. Python interpreter startup is ~0.017s.

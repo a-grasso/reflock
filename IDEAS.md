@@ -25,7 +25,7 @@ than by priority tier.
 3. **Parallel file reads in `build_index`.** Reading and hashing every
    tracked text file is I/O-bound and embarrassingly parallel; a thread pool
    (GIL releases during file I/O) would cut wall time on large repos with
-   zero change to the single-file, no-dependency design.
+   zero change to the no-dependency design.
 4. **Lazy target-side parsing.** `check <path>` already scopes which files
    are treated as *sources*, but `build_index` still reads the whole tree to
    resolve *targets*. Deferring per-file parsing (headings, spans) until a
