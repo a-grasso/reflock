@@ -1,0 +1,16 @@
+{
+  "description": "NS-03b: --warn changes the exit code and nothing else. Byte-identical stdout, so it cannot drift into being a second output format.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": ["--check"],
+      "expect_exit": 1
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--check", "--warn"],
+      "expect_exit": 0,
+      "expect_stdout_same_as_step": 0
+    }
+  ]
+}
