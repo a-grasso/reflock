@@ -407,6 +407,20 @@ items:
       RawDescriptionHelpFormatter. Help text only - no flag, renderer, or
       parser_spec()/completion change.
 
+  - id: CLI-03
+    title: bare reflock shows usage instead of live state
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/CLI-03-bare-invocation-defaults-to-check.md
+    blocked_by: []
+    touches: [reflock_lib/cli.py, test_reflock.py]
+    note: >-
+      Fully empty argv now delegates to `check` before argparse ever sees a
+      missing-subcommand error. Scoped tightly: --root with no subcommand
+      still errors, and no other subcommand becomes implicit.
+
   - id: DOC-01
     title: the documented pre-commit rev names a tag without the manifest
     source: review 2026-07-28

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from reflock_lib import __version__
 from reflock_lib.engine import build_index, repo_root
@@ -268,6 +269,13 @@ def cmd_completion(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv:
+        # Nothing at all, not even --root: the one input where "which
+        # subcommand did you mean" has an unambiguous, documented answer
+        # (README's own quickstart runs `check` first) rather than a guess.
+        argv = ["check"]
     ap = build_parser()
     args = ap.parse_args(argv)
     if getattr(args, "needs_index", True) is False:
