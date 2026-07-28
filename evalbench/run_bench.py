@@ -41,7 +41,9 @@ def load_scenario(name: str) -> dict:
 
 def materialize(name: str, scenario: dict, tmp: str) -> None:
     src = os.path.join(FIXTURES_DIR, name, "repo")
-    shutil.copytree(src, tmp, dirs_exist_ok=True)
+    # symlinks=True: the default replaces a link with a copy of its destination,
+    # so a fixture could not express a symlink at all - which BUG-05 needs.
+    shutil.copytree(src, tmp, dirs_exist_ok=True, symlinks=True)
     git = scenario.get("git", {})
     if git.get("skip", False):
         return  # fixture deliberately exercises the non-git walk fallback
@@ -178,7 +180,10 @@ def check_step(tmp: str, step: dict, ctx: StepContext) -> list[str]:
     if step.get("expect_stdout_empty") and out != "":
         fails.append(f"expected stdout to be empty\n--- stdout ---\n{out}")
     for relpath, pattern in step.get("expect_file_regex", {}).items():
-        with open(os.path.join(tmp, relpath), encoding="utf-8") as fh:
+        # newline="": a file-content assertion must see the file's real line
+        # endings. Universal-newline decoding turns \r\n into \n, so a fixture
+        # could not tell whether a command had rewritten them (BUG-05).
+        with open(os.path.join(tmp, relpath), encoding="utf-8", newline="") as fh:
             content = fh.read()
         if not re.search(pattern, content):
             fails.append(f"expected {relpath} to match /{pattern}/\n--- content ---\n{content}")

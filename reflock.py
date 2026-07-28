@@ -116,6 +116,7 @@ class Index:
     # path -> {name: (start_line0, end_line0)}  span is exclusive of markers
     spans: dict[str, dict[str, tuple[int, int]]] = field(default_factory=dict)
     ignored: set[str] = field(default_factory=set)  # scanned as targets, not as sources
+    symlinks: set[str] = field(default_factory=set)  # ditto: readable, never written
 
 
 # --- helpers -----------------------------------------------------------------
@@ -211,6 +212,12 @@ def build_index(root: str) -> Index:
         idx.files.add(rel)
         if any(fnmatch.fnmatch(rel, p) for p in ignore_patterns):
             idx.ignored.add(rel)
+        if os.path.islink(ap):
+            # Indexed so it still resolves and fingerprints as a *target* -
+            # reading through a link is what the author asked for. Excluded as a
+            # source in scoped_files, because open(path, "w") writes through the
+            # link and `stamp` would modify a file outside the tree (BUG-05).
+            idx.symlinks.add(rel)
         parts = rel.split("/")
         for i in range(1, len(parts)):
             idx.dirs.add("/".join(parts[:i]))
@@ -465,7 +472,9 @@ def scoped_files(idx: Index, paths: list[str]) -> list[str]:
     of only those - is matched and simply empty, so explicit scoping and
     .reflockignore do not fight each other.
     """
-    sources = sorted(f for f in idx.files if f in idx.lines and f not in idx.ignored)
+    sources = sorted(f for f in idx.files
+                      if f in idx.lines and f not in idx.ignored
+                      and f not in idx.symlinks)
     if not paths:
         return sources
     selected: set[str] = set()
@@ -641,15 +650,25 @@ def cmd_stamp(idx: Index, args) -> int:
         return 0
     changed = 0
     for rel, edits in edits_by_rel.items():
-        lines = idx.lines[rel]
+        ap = os.path.join(idx.root, rel)
+        # Re-read with newline="" and splice into the file's own lines, keeping
+        # each terminator attached. Rebuilding from idx.lines - which came from a
+        # universal-newline read - rewrote every \r\n in the file to \n, so
+        # stamping one pin produced a whole-file diff, and a file with no
+        # trailing newline gained one (BUG-05). Pin spans are offsets into the
+        # line content, so they stay valid with the terminator left in place.
+        with open(ap, encoding="utf-8", newline="") as fh:
+            keep = fh.read().splitlines(keepends=True)
         for lineno, splices in edits.items():
-            ln = lines[lineno]
+            ln = keep[lineno]
             for s, e, fp in sorted(splices, reverse=True):
                 ln = ln[:s] + fp + ln[e:]
-            lines[lineno] = ln
+            keep[lineno] = ln
             changed += len(splices)
-        with open(os.path.join(idx.root, rel), "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lines) + "\n")
+        text = "".join(keep)
+        with open(ap, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        idx.lines[rel] = text.splitlines()   # keep the index consistent
     print(f"Stamped {changed} pin(s).")
     return 0
 

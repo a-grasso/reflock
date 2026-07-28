@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -525,6 +526,101 @@ class ReflockTest(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
+
+    # --- BUG-05: stamp must not rewrite bytes it is not stamping -------------
+    def write_bytes(self, rel, data: bytes):
+        p = os.path.join(self.d, rel)
+        os.makedirs(os.path.dirname(p) or self.d, exist_ok=True)
+        with open(p, "wb") as fh:
+            fh.write(data)
+
+    def read_bytes(self, rel) -> bytes:
+        with open(os.path.join(self.d, rel), "rb") as fh:
+            return fh.read()
+
+    PIN_RE = re.compile(rb"<!--@([0-9a-f]{8})-->")
+
+    def assert_only_pin_changed(self, rel, before: bytes):
+        """The whole point of stamp: 8 hex characters move, nothing else."""
+        after = self.read_bytes(rel)
+        self.assertNotEqual(before, after, "nothing was stamped at all")
+        neutralized = self.PIN_RE.sub(b"<!--@-->", after)
+        self.assertEqual(before, neutralized,
+                          "stamp changed bytes outside the pin span")
+
+    def test_stamp_preserves_crlf_on_every_line(self):
+        self.write("t.md", "# T\n\nbody\n")
+        before = b"crlf [z](t.md)<!--@-->\r\nsecond line\r\nthird\r\n"
+        self.write_bytes("a.md", before)
+        self.stamp()
+        after = self.read_bytes("a.md")
+        self.assertEqual(3, after.count(b"\r\n"), f"CRLF endings lost: {after!r}")
+        self.assert_only_pin_changed("a.md", before)
+
+    def test_stamp_preserves_mixed_line_endings(self):
+        self.write("t.md", "# T\n")
+        before = b"lf [a](t.md)<!--@-->\ncrlf line\r\nlf again\n"
+        self.write_bytes("a.md", before)
+        self.stamp()
+        self.assert_only_pin_changed("a.md", before)
+
+    def test_stamp_preserves_absent_trailing_newline(self):
+        self.write("t.md", "# T\n")
+        before = b"no trailing newline [y](t.md)<!--@-->"
+        self.write_bytes("a.md", before)
+        self.stamp()
+        after = self.read_bytes("a.md")
+        self.assertFalse(after.endswith(b"\n"), f"gained a trailing newline: {after!r}")
+        self.assert_only_pin_changed("a.md", before)
+
+    def test_stamp_preserves_trailing_blank_lines(self):
+        self.write("t.md", "# T\n")
+        before = b"pin [x](t.md)<!--@-->\n\n\n"
+        self.write_bytes("a.md", before)
+        self.stamp()
+        self.assertTrue(self.read_bytes("a.md").endswith(b"\n\n\n"))
+        self.assert_only_pin_changed("a.md", before)
+
+    def test_stamp_ordinary_lf_file_unchanged_outside_pin(self):
+        self.write("t.md", "# T\n")
+        before = b"pin [x](t.md)<!--@-->\nplain line\n"
+        self.write_bytes("a.md", before)
+        self.stamp()
+        self.assert_only_pin_changed("a.md", before)
+
+    def test_stamp_does_not_write_through_a_symlink(self):
+        """The destination is outside the repo; git would show nothing."""
+        outside = tempfile.mkdtemp()
+        try:
+            victim = os.path.join(outside, "victim.md")
+            payload = "OUTSIDE THE REPO [x](t.md)<!--@-->\n"
+            with open(victim, "w") as fh:
+                fh.write(payload)
+            self.write("t.md", "# T\n\nbody\n")
+            os.symlink(victim, os.path.join(self.d, "link.md"))
+            self.stamp()
+            with open(victim) as fh:
+                self.assertEqual(payload, fh.read(),
+                                  "stamp wrote through a symlink, outside the tree")
+        finally:
+            shutil.rmtree(outside, ignore_errors=True)
+
+    def test_symlinked_file_is_not_a_reference_source(self):
+        self.write("sub/doc.md", "See [x](missing.md)\n")
+        os.symlink(os.path.join(self.d, "sub", "doc.md"),
+                    os.path.join(self.d, "link.md"))
+        rc, findings = self.check_json()
+        self.assertEqual(["sub/doc.md"], [f["file"] for f in findings],
+                          "the symlink must not be scanned as a second source")
+
+    def test_reference_to_a_symlink_still_resolves(self):
+        """Excluding symlinks as *sources* must not break them as *targets*."""
+        self.write("real.md", "# Real\n\nbody\n")
+        os.symlink(os.path.join(self.d, "real.md"), os.path.join(self.d, "link.md"))
+        self.write("a.md", "See [x](link.md)<!--@-->\n")
+        self.stamp()
+        self.assertRegex(self.read("a.md"), r"<!--@[0-9a-f]{8}-->")
+        self.assertEqual("OK", self.verdict("a.md"))
 
     # --- BUG-04: a path argument matching nothing is a usage error -----------
     def run_cmd(self, *argv):
@@ -1368,6 +1464,20 @@ class BenchHarnessTest(unittest.TestCase):
         for step in steps:
             fails = run_bench.check_step(self.d, step, ctx)
         return fails
+
+    # --- fixture premises version control could erase -----------------------
+    def test_crlf_fixture_keeps_its_crlf_through_git(self):
+        """BUG-05's CRLF fixture asserts stamp preserves \\r\\n, so the \\r\\n has to
+        survive being committed. With core.autocrlf=input git stores it as LF and
+        the fixture passes locally while failing on every fresh clone - so the
+        -text attribute is part of the test, and this asserts both halves."""
+        rel = "evalbench/fixtures/stamp-preserves-crlf/repo/a.md"
+        with open(os.path.join(REPO_ROOT, rel), "rb") as fh:
+            self.assertIn(b"\r\n", fh.read(), f"{rel} lost its CRLF on disk")
+        with open(os.path.join(REPO_ROOT, ".gitattributes"), encoding="utf-8") as fh:
+            attrs = fh.read()
+        self.assertRegex(attrs, re.escape(rel) + r"\s+-text",
+                          ".gitattributes must stop git normalizing the fixture")
 
     # --- 1. unknown keys are an error ---------------------------------------
     def test_unknown_step_key_fails_and_is_named(self):

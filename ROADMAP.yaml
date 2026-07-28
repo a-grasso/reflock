@@ -242,10 +242,11 @@ items:
     source: review 2026-07-28
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/BUG-05-write-path-fidelity.md
     blocked_by: [BENCH-01]
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    touches: [reflock.py, test_reflock.py, evalbench/run_bench.py,
+              evalbench/fixtures/]
     note: >-
       Two defects in one write path. cmd_stamp round-trips the whole file
       through universal-newline decoding, so stamping one pin converts every

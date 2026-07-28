@@ -197,6 +197,15 @@ reflock backlinks doc/DESIGN.md   # what points at this file, before you edit it
 reflock explain doc/DESIGN.md:42  # everything about one reference
 ```
 
+`stamp` is a surgical write: it changes the 8 hex characters of a pin and
+nothing else. Line endings are preserved exactly as the file had them, `\r\n`
+and mixed files included, and a file with no trailing newline does not gain one
+— so stamping one pin never produces a whole-file diff. It does not follow
+symlinks: a symlinked file is not scanned for references, because writing
+through the link would modify a file outside the tree with nothing to show for
+it in `git status`. A reference *pointing at* a symlink resolves and
+fingerprints normally, since that direction is only a read.
+
 `check` colors verdict labels by severity when stdout is a terminal; pass
 `--no-color` or set `NO_COLOR` (https://no-color.org) to turn that off, or pipe
 output anywhere and it's plain text automatically.
