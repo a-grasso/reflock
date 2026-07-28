@@ -421,6 +421,21 @@ items:
       missing-subcommand error. Scoped tightly: --root with no subcommand
       still errors, and no other subcommand becomes implicit.
 
+  - id: ID-22
+    title: reflock setup claude
+    source: AXI adoption review 2026-07-28
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/ID-22-setup-claude-subcommand.md
+    blocked_by: []
+    touches: [reflock_lib/setup.py, reflock_lib/cli.py, test_reflock.py]
+    note: >-
+      Promotes examples/hooks/reflock-gate.sh from copy-paste material to an
+      idempotent, path-repairing setup command. SessionStart dashboards and
+      Codex/OpenCode support explicitly excluded - no existing integration
+      to promote for either.
+
   - id: DOC-01
     title: the documented pre-commit rev names a tag without the manifest
     source: review 2026-07-28

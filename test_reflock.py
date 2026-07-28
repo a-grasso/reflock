@@ -25,6 +25,7 @@ _spec.loader.exec_module(reflock)
 # it where the calling code actually looks it up.
 from reflock_lib import engine as reflock_engine
 from reflock_lib import cli as reflock_cli
+from reflock_lib import setup as reflock_setup
 
 
 class _TTYBuffer(io.StringIO):
@@ -2106,6 +2107,111 @@ class ReflockTest(unittest.TestCase):
         before = self.read("a.md")
         self.run_explain("a.md:1")
         self.assertEqual(self.read("a.md"), before)
+
+
+class SetupClaudeTest(unittest.TestCase):
+    """ID-22: `reflock setup claude` installs/repairs the Stop-hook gate.
+
+    reflock_invocation()'s PATH-preference branch is intentionally untested
+    here - it depends on whether `reflock` happens to be on PATH on the
+    machine running the tests, so a real assertion needs shutil.which/
+    os.path.realpath mocked, which mostly re-asserts the mock. The pure
+    merge/render logic and cmd_setup's actual file effects are deterministic
+    and are what's covered below.
+    """
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def run_setup(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "setup", "claude"])
+        return rc, buf.getvalue()
+
+    def hook_path(self):
+        return os.path.join(self.d, ".claude", "hooks", "reflock-gate.sh")
+
+    def settings_path(self):
+        return os.path.join(self.d, ".claude", "settings.json")
+
+    # --- add_stop_hook() -----------------------------------------------
+    def test_add_stop_hook_to_empty_settings(self):
+        result = reflock_setup.add_stop_hook({})
+        self.assertEqual(
+            [{"matcher": "", "hooks": [{"type": "command",
+                                          "command": reflock_setup.STOP_HOOK_COMMAND}]}],
+            result["hooks"]["Stop"])
+
+    def test_add_stop_hook_preserves_sibling_hook_types(self):
+        settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}
+        result = reflock_setup.add_stop_hook(settings)
+        self.assertEqual(settings["hooks"]["PreToolUse"], result["hooks"]["PreToolUse"])
+        self.assertEqual(1, len(result["hooks"]["Stop"]))
+
+    def test_add_stop_hook_is_idempotent(self):
+        once = reflock_setup.add_stop_hook({})
+        twice = reflock_setup.add_stop_hook(once)
+        self.assertIs(once, twice)
+        self.assertEqual(1, len(twice["hooks"]["Stop"]))
+
+    def test_add_stop_hook_does_not_mutate_input(self):
+        settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}
+        before = json.dumps(settings)
+        reflock_setup.add_stop_hook(settings)
+        self.assertEqual(before, json.dumps(settings))
+
+    # --- render_hook_script() -------------------------------------------
+    def test_render_hook_script_embeds_invocation(self):
+        script = reflock_setup.render_hook_script("reflock")
+        self.assertIn('reflock_cmd="${REFLOCK:-reflock}"', script)
+
+    def test_render_hook_script_is_stable(self):
+        self.assertEqual(reflock_setup.render_hook_script("reflock"),
+                          reflock_setup.render_hook_script("reflock"))
+
+    # --- cmd_setup() end to end -----------------------------------------
+    def test_setup_writes_hook_and_settings_on_fresh_tree(self):
+        rc, out = self.run_setup()
+        self.assertEqual(0, rc)
+        self.assertIn("wrote", out)
+        self.assertIn("added Stop hook", out)
+        self.assertTrue(os.path.exists(self.hook_path()))
+        self.assertTrue(os.access(self.hook_path(), os.X_OK))
+        with open(self.settings_path()) as fh:
+            settings = json.load(fh)
+        self.assertEqual(1, len(settings["hooks"]["Stop"]))
+
+    def test_setup_second_run_is_a_no_op(self):
+        self.run_setup()
+        hook_mtime = os.path.getmtime(self.hook_path())
+        rc, out = self.run_setup()
+        self.assertEqual(0, rc)
+        self.assertIn("unchanged", out)
+        self.assertIn("already has the Stop hook", out)
+        self.assertEqual(hook_mtime, os.path.getmtime(self.hook_path()))
+
+    def test_setup_preserves_unrelated_settings_keys(self):
+        os.makedirs(os.path.dirname(self.settings_path()))
+        with open(self.settings_path(), "w") as fh:
+            json.dump({"permissions": {"allow": ["Bash(ls:*)"]}}, fh)
+        self.run_setup()
+        with open(self.settings_path()) as fh:
+            settings = json.load(fh)
+        self.assertEqual(["Bash(ls:*)"], settings["permissions"]["allow"])
+        self.assertEqual(1, len(settings["hooks"]["Stop"]))
+
+    def test_setup_rejects_invalid_json_without_overwriting(self):
+        os.makedirs(os.path.dirname(self.settings_path()))
+        with open(self.settings_path(), "w") as fh:
+            fh.write("{not valid json")
+        rc, out = self.run_setup()
+        self.assertEqual(2, rc)
+        with open(self.settings_path()) as fh:
+            self.assertEqual("{not valid json", fh.read())
 
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))

@@ -17,6 +17,9 @@ from reflock_lib.commands import (
     cmd_stamp,
     cmd_suspects,
 )
+from reflock_lib.setup import cmd_setup
+
+SETUP_TARGETS = ("claude",)
 
 COMPLETION_SHELLS = ("bash", "zsh", "fish")
 
@@ -93,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
                                  "  reflock completion zsh  > ~/.zsh/completions/_reflock\n")
     comp.add_argument("shell", choices=COMPLETION_SHELLS)
     comp.set_defaults(fn=cmd_completion, needs_index=False)
+    setup = sub.add_parser("setup", help="install/repair an agent session integration",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="examples:\n"
+                              "  reflock setup claude\n")
+    setup.add_argument("target", choices=SETUP_TARGETS)
+    setup.set_defaults(fn=cmd_setup, needs_index=False)
     return ap
 
 
