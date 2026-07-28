@@ -15,7 +15,7 @@ tests by exercising git-specific behavior (`.gitignore`, untracked files, `git l
 scoping) that a unit test against a plain directory can't reach.
 
 ## Working here
-- **Run:** from repo root, `make bench` (`python3 evalbench/run_bench.py`).
+- **Run:** from repo root, `just bench` (`python3 evalbench/run_bench.py`).
 - **Run a subset:** `python3 evalbench/run_bench.py <fixture-name> ...`
 - **Verbose (show diffs on failure):** `python3 evalbench/run_bench.py -v`
 - **Entry points:** `run_bench.py` (harness); `fixtures/<name>/scenario.json` (per-fixture

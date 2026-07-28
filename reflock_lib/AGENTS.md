@@ -16,7 +16,7 @@ renderers, and CLI parsing. `reflock.py` at the repo root is a thin wrapper arou
 package.
 
 ## Working here
-- **Test:** from repo root, `make test` (`python3 -m unittest -v test_reflock`).
+- **Test:** from repo root, `just test` (`python3 -m unittest -v test_reflock`).
 - **Entry points:** `grammar.py` (reference patterns + data model) → `engine.py`
   (resolution/fingerprinting) → `commands.py` (subcommands + renderers) → `cli.py`
   (argument parsing, completions, main entry).

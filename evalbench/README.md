@@ -14,7 +14,7 @@ plain non-git temp directory.
 ## Run it
 
 ```sh
-make bench                       # every fixture
+just bench                       # every fixture
 python3 evalbench/run_bench.py   # equivalent
 python3 evalbench/run_bench.py dangling-file drifted-after-edit   # just these
 python3 evalbench/run_bench.py -v                                  # show diffs on failure

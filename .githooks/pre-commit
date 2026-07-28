@@ -4,7 +4,7 @@
 # Enable once per clone:
 #     git config core.hooksPath .githooks
 #
-# `make gate` is test + bench + check. `suspects` is excluded deliberately: it
+# `just gate` is test + bench + check. `suspects` is excluded deliberately: it
 # is an advisory heuristic that exits nonzero whenever it has anything to say.
 #
 # This exists because an autonomous loop commits when the *agent* reports
@@ -13,9 +13,9 @@
 # landed.
 set -e
 
-if ! make gate; then
+if ! just gate; then
 	echo >&2
-	echo "pre-commit: make gate failed - commit rejected." >&2
+	echo "pre-commit: just gate failed - commit rejected." >&2
 	echo "pre-commit: fix the cause. Do not bypass with --no-verify." >&2
 	exit 1
 fi

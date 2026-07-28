@@ -26,8 +26,8 @@
 #   in-progress    - an agent or branch holds it
 #   done           - shipped; the source entry in NORTHSTARS/IDEAS is deleted
 #
-# Invariant for every item, never restated per-entry: `make test`, `make bench`,
-# `make check` and `make suspects` all pass, and one commit is one item.
+# Invariant for every item, never restated per-entry: `just test`, `just bench`,
+# `just check` and `just suspects` all pass, and one commit is one item.
 
 version: 1
 
