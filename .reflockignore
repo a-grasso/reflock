@@ -2,6 +2,7 @@
 # reflock documents and tests its own REF: syntax, so its source carries
 # example/fixture references that are not real.
 reflock.py
+reflock_lib/grammar.py
 test_reflock.py
 NORTHSTARS.md
 

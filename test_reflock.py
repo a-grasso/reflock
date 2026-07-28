@@ -18,6 +18,14 @@ reflock = importlib.util.module_from_spec(_spec)
 sys.modules["reflock"] = reflock  # let dataclasses resolve annotations at import
 _spec.loader.exec_module(reflock)
 
+# reflock.py re-exports these for its flat public API, but a function's calls to
+# its own module-level neighbours resolve in the module it's *defined* in, not
+# in reflock's re-exported namespace - so a test patching a call target that's
+# invoked internally (not just called directly from this test file) must patch
+# it where the calling code actually looks it up.
+from reflock_lib import engine as reflock_engine
+from reflock_lib import cli as reflock_cli
+
 
 class _TTYBuffer(io.StringIO):
     """A StringIO that claims to be a terminal, for exercising the color path."""
@@ -798,7 +806,7 @@ class ReflockTest(unittest.TestCase):
         def counting(text):
             calls.append(text)
             return real(text)
-        return mock.patch.object(reflock, "normalize", counting), calls
+        return mock.patch.object(reflock_engine, "normalize", counting), calls
 
     def test_one_normalize_per_distinct_unit(self):
         self.big_target()
@@ -1552,7 +1560,7 @@ class ReflockTest(unittest.TestCase):
                         if isinstance(a, __import__("argparse")._SubParsersAction))
             sub.choices["check"].add_argument("--brand-new", action="store_true")
             return ap
-        with mock.patch.object(reflock, "build_parser", with_extra_flag):
+        with mock.patch.object(reflock_cli, "build_parser", with_extra_flag):
             for shell in reflock.COMPLETION_SHELLS:
                 script = reflock.completion_script(shell)
                 self.assertTrue(
