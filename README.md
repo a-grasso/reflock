@@ -266,6 +266,14 @@ prior text is not recoverable; it does not shell out to git history to
 reconstruct it. Supports `--format <human|json>` per the same renderer
 pattern.
 
+The unit text is a **preview**: up to 40 lines, then one line saying how many
+were withheld. For an unanchored reference the unit is the whole file, so
+without that a pinned reference to a 2000-line document printed 2000 lines —
+unreadable exactly where a reference matters most, since a heavily-pinned
+authority file is usually a long one. Pass `--full` for all of it. The rule is
+the same for anchored units: a 900-line section is no more readable than a
+900-line file.
+
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
 source of truth reflock exists to keep A and B from silently disagreeing about.

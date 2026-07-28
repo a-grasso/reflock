@@ -527,6 +527,56 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- UX-01: the unit text is a preview, not a dump ----------------------
+    def long_target(self, n, anchor=False):
+        head = "# T\n\n## Sec\n\n" if anchor else ""
+        self.write("t.md", head + "".join(f"line {i}\n" for i in range(1, n + 1)))
+        tgt = "t.md#sec" if anchor else "t.md"
+        self.write("a.md", f"See [x]({tgt})<!--@-->\n")
+        self.stamp()
+
+    def test_long_unit_is_truncated_with_an_accurate_count(self):
+        self.long_target(60)
+        _, out, _ = self.run_cmd("explain", "a.md:1")
+        limit = reflock.UNIT_PREVIEW_LINES
+        self.assertIn("line 1\n", out)
+        self.assertIn(f"line {limit}\n", out)
+        self.assertNotIn("line 60", out, "the whole file must not be dumped")
+        self.assertIn(f"{60 - limit} more lines", out)
+        self.assertIn("--full", out, "the escape hatch must be discoverable")
+
+    def test_full_shows_the_whole_unit_and_no_marker(self):
+        self.long_target(60)
+        _, out, _ = self.run_cmd("explain", "a.md:1", "--full")
+        self.assertIn("line 60", out)
+        self.assertNotIn("more lines", out)
+
+    def test_unit_at_the_limit_is_not_truncated(self):
+        self.long_target(reflock.UNIT_PREVIEW_LINES)
+        _, out, _ = self.run_cmd("explain", "a.md:1")
+        self.assertIn(f"line {reflock.UNIT_PREVIEW_LINES}", out)
+        self.assertNotIn("more lines", out)
+
+    def test_unit_one_over_the_limit_says_one_more_line(self):
+        self.long_target(reflock.UNIT_PREVIEW_LINES + 1)
+        _, out, _ = self.run_cmd("explain", "a.md:1")
+        self.assertIn("1 more line", out)
+        self.assertNotIn("1 more lines", out, "singular, for one withheld line")
+
+    def test_anchored_unit_is_truncated_too(self):
+        """The rule is uniform: a 900-line section is as unreadable as a file."""
+        self.long_target(60, anchor=True)
+        _, out, _ = self.run_cmd("explain", "a.md:1")
+        self.assertNotIn("line 60", out)
+        self.assertIn("more lines", out)
+
+    def test_json_output_identical_with_and_without_full(self):
+        self.long_target(60)
+        _, plain, _ = self.run_cmd("explain", "a.md:1", "--format", "json")
+        _, full, _ = self.run_cmd("explain", "a.md:1", "--format", "json", "--full")
+        self.assertEqual(plain, full)
+        json.loads(plain)   # and still valid JSON
+
     # --- CLI-01: one notion of a path argument -------------------------------
     def in_dir(self, sub, *argv):
         """Run reflock with the CWD inside the tree, as a user would."""
