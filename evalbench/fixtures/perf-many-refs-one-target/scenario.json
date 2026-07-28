@@ -1,0 +1,30 @@
+{
+  "description": "PERF-01: twelve references to one anchored unit. The unit is fingerprinted once per index and every reference reuses it, so this asserts memoization did not cost correctness - all twelve stamp, all twelve go OK, and an edit to the target drifts all twelve, not just the first.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["Stamped 12 pin(s)."]
+    },
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["All references OK."]
+    },
+    {
+      "cmd": "check",
+      "args": [],
+      "write": {
+        "t.md": "# Title\n\n## Sec\n\nthe authoritative sentence, materially revised.\n"
+      },
+      "expect_exit": 1,
+      "expect_contains": [
+        "DRIFTED (12)",
+        "a.md:1",
+        "a.md:12"
+      ]
+    }
+  ]
+}

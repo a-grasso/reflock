@@ -1,0 +1,24 @@
+{
+  "description": "check --format human produces byte-identical output to the human default (no format flag), for a tree with one DANGLING finding.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": [
+        "DANGLING (1)",
+        "a.md:1  missing.md",
+        "1 problem(s)."
+      ]
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "human"
+      ],
+      "expect_exit": 1,
+      "expect_stdout_same_as_step": 0
+    }
+  ]
+}

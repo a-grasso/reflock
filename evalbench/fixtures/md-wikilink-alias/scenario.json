@@ -1,0 +1,11 @@
+{
+  "description": "An alias after | is display text, excluded from the target.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

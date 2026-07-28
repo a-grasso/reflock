@@ -1,0 +1,13 @@
+{
+  "description": "A quoted title after the target in a reference-style definition does not become part of the target.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json", "--verbose"],
+      "expect_exit": 0,
+      "expect_json": [
+        {"verdict": "OK", "file": "a.md", "line": 3, "target": "t.md#real", "detail": "unpinned"}
+      ]
+    }
+  ]
+}

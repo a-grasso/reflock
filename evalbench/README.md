@@ -72,6 +72,26 @@ any commands run. `scenario.json`:
   - `expect_file_regex`: `{"relpath": "regex"}` checked against a file's
     content after the step runs (e.g. confirming `stamp` spliced in a hex
     fingerprint).
+  - `expect_stderr` / `expect_stderr_not_contains`: the same substring checks
+    against stderr. A contract that says "this goes to stderr" needs both
+    halves — present on stderr *and* absent from stdout.
+  - `expect_stdout_empty` / `expect_stderr_empty`: `true` asserts the stream is
+    exactly empty. "Prints nothing on success" is a claim about the whole
+    stream; an `expect_not_contains` list of words that happen not to appear
+    passes just as well when the command printed something else entirely.
+  - `expect_stdout_same_as_step`: a 0-based index of an **earlier** step in this
+    scenario; this step's stdout must be byte-identical to that step's. For
+    "these two invocations are the same command spelled differently".
+  - `expect_tree_unchanged_since_step`: a 0-based index of an earlier step;
+    every file in the tree must have the same bytes it had after that step,
+    with none added or removed. This is how a read-only command's "writes
+    nothing" is asserted. Content only — mtime isn't a promise reflock makes,
+    and asserting it would be flaky on coarse-grained filesystems.
+
+Unknown keys are a **fixture error**, not silently ignored: a step carrying
+`expect_containss` used to report `PASS` having asserted nothing. If you add a
+primitive, add it to `STEP_KEYS` in `run_bench.py` — `BenchHarnessTest` in
+`test_reflock.py` asserts the accepted set matches the documented one.
 
 ## Adding a fixture
 

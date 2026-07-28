@@ -1,0 +1,13 @@
+{
+  "description": "A reference-style link definition pointing at a missing anchor is DANGLING with the existing no-anchor detail.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"verdict": "DANGLING", "file": "a.md", "line": 3, "target": "t.md#ghost", "detail": "no anchor '#ghost' in t.md"}
+      ]
+    }
+  ]
+}

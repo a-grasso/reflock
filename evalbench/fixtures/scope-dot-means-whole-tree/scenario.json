@@ -1,0 +1,17 @@
+{
+  "description": "BUG-04: `reflock check .` reads as 'the whole tree' and now behaves that way - byte-identical stdout to a bare `check`. It previously normalized to a path no indexed file was prefixed by, so it checked nothing and exited 0.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": ["DANGLING", "a.md:1"]
+    },
+    {
+      "cmd": "check",
+      "args": ["."],
+      "expect_exit": 1,
+      "expect_stdout_same_as_step": 0
+    }
+  ]
+}

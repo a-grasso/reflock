@@ -1,0 +1,14 @@
+{
+  "description": "two files referencing a target both appear, sorted by referring file",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md", "--format", "json"],
+      "expect_json": [
+        {"file": "a.md", "line": 1, "target": "t.md", "pin": "unpinned"},
+        {"file": "b.md", "line": 1, "target": "t.md", "pin": "unpinned"}
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

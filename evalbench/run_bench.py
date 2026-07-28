@@ -41,7 +41,9 @@ def load_scenario(name: str) -> dict:
 
 def materialize(name: str, scenario: dict, tmp: str) -> None:
     src = os.path.join(FIXTURES_DIR, name, "repo")
-    shutil.copytree(src, tmp, dirs_exist_ok=True)
+    # symlinks=True: the default replaces a link with a copy of its destination,
+    # so a fixture could not express a symlink at all - which BUG-05 needs.
+    shutil.copytree(src, tmp, dirs_exist_ok=True, symlinks=True)
     git = scenario.get("git", {})
     if git.get("skip", False):
         return  # fixture deliberately exercises the non-git walk fallback
@@ -65,9 +67,84 @@ def run_reflock(tmp: str, cmd: str, args: list[str]) -> tuple[int, str, str]:
     return p.returncode, p.stdout, p.stderr
 
 
-def check_step(tmp: str, step: dict) -> list[str]:
+# Every key a step may carry. Validated rather than read with .get(), because a
+# key the harness does not recognise used to be ignored in silence - one typo
+# (`expect_containss`) turned an assertion into a fixture that passed having
+# checked nothing.
+STEP_KEYS = frozenset({
+    "description", "write", "cmd", "args",
+    "expect_exit", "expect_json",
+    "expect_contains", "expect_not_contains", "expect_file_regex",
+    "expect_stderr", "expect_stderr_not_contains", "expect_stderr_empty",
+    "expect_stdout_empty",
+    "expect_stdout_same_as_step", "expect_tree_unchanged_since_step",
+})
+
+
+class StepContext:
+    """What a step needs to know about the steps before it.
+
+    Populated as a scenario runs: `stdouts[i]` and `snapshots[i]` are step i's
+    stdout and the tree's content immediately after step i finished.
+    """
+    def __init__(self):
+        self.stdouts: list[str] = []
+        self.snapshots: list[dict[str, bytes]] = []
+
+
+def snapshot_tree(tmp: str) -> dict[str, bytes]:
+    """Every file's bytes, keyed by repo-relative path. `.git` is excluded: it is
+    the harness's own bookkeeping, not part of what a command promises to leave
+    alone."""
+    snap = {}
+    for dirpath, dirnames, filenames in os.walk(tmp):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for fn in filenames:
+            ap = os.path.join(dirpath, fn)
+            rel = os.path.relpath(ap, tmp).replace(os.sep, "/")
+            try:
+                with open(ap, "rb") as fh:
+                    snap[rel] = fh.read()
+            except OSError as e:
+                snap[rel] = f"<unreadable: {e}>".encode()
+    return snap
+
+
+def diff_snapshots(before: dict[str, bytes], after: dict[str, bytes]) -> list[str]:
+    """Human-readable description of every difference (empty = identical)."""
+    diffs = []
+    for rel in sorted(set(after) - set(before)):
+        diffs.append(f"{rel} was created")
+    for rel in sorted(set(before) - set(after)):
+        diffs.append(f"{rel} was deleted")
+    for rel in sorted(set(before) & set(after)):
+        if before[rel] != after[rel]:
+            diffs.append(f"{rel} changed:\n"
+                          f"      before: {before[rel]!r}\n"
+                          f"      after:  {after[rel]!r}")
+    return diffs
+
+
+def _step_ref(step: dict, key: str, current: int, have: int) -> tuple[int | None, str | None]:
+    """Validate a step-index reference. Returns (index, error)."""
+    n = step[key]
+    if not isinstance(n, int) or isinstance(n, bool):
+        return None, f"{key}: expected an integer step index, got {n!r}"
+    if n < 0 or n >= current or n >= have:
+        return None, (f"{key}: step {n} has not run yet (this is step {current}); "
+                      f"a step may only refer to an earlier one")
+    return n, None
+
+
+def check_step(tmp: str, step: dict, ctx: StepContext) -> list[str]:
     """Run one step; return a list of human-readable failure descriptions (empty = pass)."""
     fails = []
+    unknown = sorted(set(step) - STEP_KEYS)
+    if unknown:
+        fails.append(f"unknown step key(s): {', '.join(unknown)} "
+                      f"(known: {', '.join(sorted(STEP_KEYS))})")
+        return fails
+    current = len(ctx.stdouts)
     for relpath, content in step.get("write", {}).items():
         path = os.path.join(tmp, relpath)
         os.makedirs(os.path.dirname(path) or tmp, exist_ok=True)
@@ -92,11 +169,44 @@ def check_step(tmp: str, step: dict) -> list[str]:
     for needle in step.get("expect_not_contains", []):
         if needle in out:
             fails.append(f"expected stdout to NOT contain {needle!r}\n--- stdout ---\n{out}")
+    for needle in step.get("expect_stderr", []):
+        if needle not in err:
+            fails.append(f"expected stderr to contain {needle!r}\n--- stderr ---\n{err}")
+    for needle in step.get("expect_stderr_not_contains", []):
+        if needle in err:
+            fails.append(f"expected stderr to NOT contain {needle!r}\n--- stderr ---\n{err}")
+    if step.get("expect_stderr_empty") and err != "":
+        fails.append(f"expected stderr to be empty\n--- stderr ---\n{err}")
+    if step.get("expect_stdout_empty") and out != "":
+        fails.append(f"expected stdout to be empty\n--- stdout ---\n{out}")
     for relpath, pattern in step.get("expect_file_regex", {}).items():
-        with open(os.path.join(tmp, relpath), encoding="utf-8") as fh:
+        # newline="": a file-content assertion must see the file's real line
+        # endings. Universal-newline decoding turns \r\n into \n, so a fixture
+        # could not tell whether a command had rewritten them (BUG-05).
+        with open(os.path.join(tmp, relpath), encoding="utf-8", newline="") as fh:
             content = fh.read()
         if not re.search(pattern, content):
             fails.append(f"expected {relpath} to match /{pattern}/\n--- content ---\n{content}")
+    if "expect_stdout_same_as_step" in step:
+        n, err_msg = _step_ref(step, "expect_stdout_same_as_step", current, len(ctx.stdouts))
+        if err_msg:
+            fails.append(err_msg)
+        elif out != ctx.stdouts[n]:
+            fails.append(f"stdout differs from step {n}'s\n"
+                          f"--- step {n} ---\n{ctx.stdouts[n]}\n--- this step ---\n{out}")
+    after = snapshot_tree(tmp)
+    if "expect_tree_unchanged_since_step" in step:
+        n, err_msg = _step_ref(step, "expect_tree_unchanged_since_step", current,
+                                len(ctx.snapshots))
+        if err_msg:
+            fails.append(err_msg)
+        else:
+            diffs = diff_snapshots(ctx.snapshots[n], after)
+            if diffs:
+                fails.append(f"tree changed since step {n}:\n    "
+                              + "\n    ".join(diffs))
+    ctx.stdouts.append(out)
+    ctx.snapshots.append(after)
     return fails
 
 
@@ -105,8 +215,9 @@ def run_fixture(name: str, verbose: bool) -> tuple[bool, list[str]]:
     with tempfile.TemporaryDirectory(prefix="reflock-bench-") as tmp:
         materialize(name, scenario, tmp)
         all_fails = []
+        ctx = StepContext()
         for i, step in enumerate(scenario["steps"]):
-            fails = check_step(tmp, step)
+            fails = check_step(tmp, step, ctx)
             for f in fails:
                 all_fails.append(f"step {i} ({step['cmd']} {' '.join(step.get('args', []))}): {f}")
         return (not all_fails), all_fails

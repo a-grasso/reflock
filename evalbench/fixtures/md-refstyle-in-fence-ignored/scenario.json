@@ -1,0 +1,11 @@
+{
+  "description": "A reference-style definition inside a fenced code block is not parsed.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

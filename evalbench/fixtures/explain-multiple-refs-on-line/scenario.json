@@ -1,0 +1,16 @@
+{
+  "description": "a line with two references reports both, in column order",
+  "steps": [
+    {
+      "cmd": "explain",
+      "args": ["a.md:1", "--format", "json"],
+      "expect_exit": 0,
+      "expect_json": [
+        {"file": "a.md", "line": 1, "target": "t.md", "verdict": "OK", "detail": "unpinned",
+         "resolves_to": "t.md", "anchor": null, "pin": "unpinned", "current": null},
+        {"file": "a.md", "line": 1, "target": "u.md", "verdict": "OK", "detail": "unpinned",
+         "resolves_to": "u.md", "anchor": null, "pin": "unpinned", "current": null}
+      ]
+    }
+  ]
+}

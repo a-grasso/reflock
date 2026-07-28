@@ -1,0 +1,17 @@
+{
+  "description": "NS-03b: the same tree, the same report, two exit codes. `stamp --check` exits 1 on a pin it would write (D5, the black --check convention); `--warn` reports it and exits 0, which is what lets the shipped pre-commit hook be advisory even though pre-commit has no warn-only mode (D6).",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": ["--check"],
+      "expect_exit": 1,
+      "expect_contains": ["a.md:1", "unstamped", "1 pin(s) would be stamped."]
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--check", "--warn"],
+      "expect_exit": 0,
+      "expect_contains": ["a.md:1", "unstamped", "1 pin(s) would be stamped."]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "description": "BUG-03: stamp writes a fingerprint only for a target it can honestly hash. An external URL, an outside-the-tree path, a directory and a binary file all keep their empty pin, and the tree is byte-identical to before stamp ran - previously every one of them was stamped with e3b0c442, the fingerprint of the empty string.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": ["cannot fingerprint"],
+      "expect_not_contains": ["e3b0c442"]
+    },
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["Stamped 0 pin(s)."],
+      "expect_tree_unchanged_since_step": 0
+    },
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "UNSTAMPED",
+          "file": "a.md",
+          "line": 4,
+          "target": "blob.bin",
+          "detail": "cannot fingerprint: no indexed text in blob.bin"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "description": "check -q --verbose is contradictory: exits nonzero with a message naming both flags.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["-q", "--verbose"],
+      "expect_exit": 2
+    }
+  ]
+}

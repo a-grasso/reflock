@@ -1,0 +1,13 @@
+{
+  "description": "check --format github emits a GitHub ::warning annotation for an UNSTAMPED finding",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--format", "github"],
+      "expect_exit": 1,
+      "expect_contains": [
+        "::warning file=a.md,line=1,title=UNSTAMPED::run: reflock stamp"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "description": "BUG-03: --rebless re-hashes existing pins, so it was the other route to a fabricated fingerprint. A hand-written pin on an external target is left exactly as found, not rewritten to e3b0c442.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--rebless"],
+      "expect_exit": 0,
+      "expect_contains": ["Stamped 0 pin(s)."],
+      "expect_tree_unchanged_since_step": 0,
+      "expect_file_regex": {
+        "a.md": "<!--@deadbeef-->"
+      }
+    }
+  ]
+}

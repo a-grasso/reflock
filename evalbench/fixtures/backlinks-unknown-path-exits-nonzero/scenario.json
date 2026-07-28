@@ -1,0 +1,10 @@
+{
+  "description": "a path absent from the index exits nonzero rather than silently reporting zero backlinks",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["nope.md"],
+      "expect_exit": 2
+    }
+  ]
+}

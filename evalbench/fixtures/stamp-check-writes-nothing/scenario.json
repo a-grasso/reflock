@@ -1,0 +1,26 @@
+{
+  "description": "`stamp --check` on a dirty-in-reflock-terms tree writes nothing - asserted as byte-for-byte identity of every file in the tree against a read-only baseline step - and then real `stamp` makes exactly the reported edit.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": ["UNSTAMPED"]
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--check"],
+      "expect_exit": 1,
+      "expect_contains": ["a.md:1", "unstamped"],
+      "expect_tree_unchanged_since_step": 0
+    },
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_file_regex": {
+        "a.md": "<!--@[0-9a-f]{8}-->"
+      }
+    }
+  ]
+}

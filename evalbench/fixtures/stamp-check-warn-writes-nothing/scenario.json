@@ -1,0 +1,17 @@
+{
+  "description": "NS-03b: --warn is still --check, so it writes nothing. Asserted as byte-for-byte tree identity against a read-only baseline - an advisory hook that quietly stamped would be worse than one that blocks.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": ["UNSTAMPED"]
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--check", "--warn"],
+      "expect_exit": 0,
+      "expect_tree_unchanged_since_step": 0
+    }
+  ]
+}

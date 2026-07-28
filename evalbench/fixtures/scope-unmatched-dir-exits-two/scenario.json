@@ -1,0 +1,24 @@
+{
+  "description": "BUG-04: the directory-prefix branch of scoping fails the same way. `check nosuchdir/` exits 2 and echoes the argument as the user spelled it, trailing slash included.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["nosuchdir/"],
+      "expect_exit": 2,
+      "expect_stdout_empty": true,
+      "expect_stderr": ["nosuchdir/"]
+    },
+    {
+      "cmd": "stamp",
+      "args": ["nosuchdir/"],
+      "expect_exit": 2,
+      "expect_stderr": ["nosuchdir/"]
+    },
+    {
+      "cmd": "suspects",
+      "args": ["nosuchdir/"],
+      "expect_exit": 2,
+      "expect_stderr": ["nosuchdir/"]
+    }
+  ]
+}

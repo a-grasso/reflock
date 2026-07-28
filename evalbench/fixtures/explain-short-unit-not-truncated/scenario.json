@@ -1,0 +1,17 @@
+{
+  "description": "UX-01 boundary: the common case is provably unchanged. A short unit prints in full with no marker anywhere - if this fixture ever shows one, the preview limit is wrong.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "explain",
+      "args": ["a.md:1"],
+      "expect_exit": 0,
+      "expect_contains": ["short", "unit", "here"],
+      "expect_not_contains": ["more lines", "more line", "--full to show"]
+    }
+  ]
+}

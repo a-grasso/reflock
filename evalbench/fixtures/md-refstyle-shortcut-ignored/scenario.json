@@ -1,0 +1,13 @@
+{
+  "description": "A lone bracketed id (the unsupported shortcut form) yields exactly one Ref - the definition - never two.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json", "--verbose"],
+      "expect_exit": 0,
+      "expect_json": [
+        {"verdict": "OK", "file": "a.md", "line": 3, "target": "t.md#real", "detail": "unpinned"}
+      ]
+    }
+  ]
+}

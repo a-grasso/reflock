@@ -1,0 +1,11 @@
+{
+  "description": "A reference-style link definition resolving to a real file and anchor is OK.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

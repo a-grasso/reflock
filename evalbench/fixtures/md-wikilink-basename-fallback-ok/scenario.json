@@ -1,0 +1,11 @@
+{
+  "description": "A wiki-link target that is not a valid relative path resolves by unique basename.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}

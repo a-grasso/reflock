@@ -1,0 +1,11 @@
+{
+  "description": "check --format github on a clean tree emits nothing on stdout and exits 0",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--format", "github"],
+      "expect_exit": 0,
+      "expect_not_contains": ["::", "problem(s)", "All references OK"]
+    }
+  ]
+}
