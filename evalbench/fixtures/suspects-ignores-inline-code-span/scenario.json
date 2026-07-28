@@ -1,0 +1,17 @@
+{
+  "description": "BUG-06: BUG-02 exempted inline code spans from reference parsing per D2, but cmd_suspects still scanned raw lines - so a path named in backticks in prose was reported as a suspect. It is now masked, while an identical path in ordinary prose on the next line is still caught, so the exemption removed a false positive without blinding the heuristic.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "file": "a.md",
+          "line": 2,
+          "target": "docs/gone.md"
+        }
+      ]
+    }
+  ]
+}

@@ -78,7 +78,11 @@ The pipeline runs four stages — see [ADR-0011](../adr/0011-….md#decision).
 ```
 
 Then `reflock check` resolves every one and reports `DANGLING` on any miss.
-`reflock suspects` helps you *find* the prose that should have been links.
+`reflock suspects` helps you *find* the prose that should have been links. It
+skips fenced blocks and inline code spans on the same basis references do — a
+path in backticks is usually prose *about* a path, and false positives are what
+destroy trust in a gate. In a non-markdown file (`--all`) backticks aren't code
+spans, so lines there are scanned as-is.
 
 Markdown's reference-style form is also understood - `[the loader][loader-ref]`
 with a `[loader-ref]: doc/adr/0013.md#loader` definition elsewhere in the file:

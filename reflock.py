@@ -919,7 +919,8 @@ def cmd_suspects(idx: Index, args) -> int:
     # Pass 1: collect path-shaped tokens that resolve to nothing.
     candidates = []  # (rel, lineno, token, [paths to test against .gitignore])
     for rel in scoped_files(idx, args.paths):
-        if not args.all and not rel.endswith((".md", ".markdown")):
+        is_md = rel.endswith((".md", ".markdown"))
+        if not args.all and not is_md:
             continue
         refd = {r.target for r in parse_refs(idx, rel)}
         in_fence = False
@@ -929,7 +930,12 @@ def cmd_suspects(idx: Index, args) -> int:
                 continue
             if in_fence:
                 continue
-            for m in PATHISH.finditer(ln):
+            # Code spans are exempt on the same basis as fenced blocks and as
+            # references themselves (D2, BUG-02): a path in backticks is prose
+            # *about* a path. Raw lines for non-markdown, exactly as parse_refs
+            # does - a backtick in a .py file is not a code span.
+            scan = mask_code_spans(ln) if is_md else ln
+            for m in PATHISH.finditer(scan):
                 tok = m.group("p")
                 if any(tok in t for t in refd):
                     continue
