@@ -251,8 +251,10 @@ you'd invalidate. `<path>` accepts an anchor (`doc/DESIGN.md#section`) to
 narrow to references targeting that anchor specifically. Each line is the
 referring file and line, the target as written, and its pin state
 (`unpinned`, `unstamped`, or `pinned`) - pin state matters because an
-unpinned reference won't notice your edit. A path with no backlinks prints a
-clear "no backlinks" line and exits 0; a path absent from the index exits
+unpinned reference won't notice your edit. Human output ends with a trailing
+`N backlink(s).` count line, matching `check`/`stamp --check`/`suspects`. A
+path with no backlinks prints a clear "no backlinks" line and exits 0; a path
+absent from the index exits
 nonzero, since silently reporting zero backlinks for a typo'd filename would
 mislead. An `#anchor` that resolves to neither a heading nor a
 `reflock-anchor:` span exits nonzero for the same reason — "nothing points at
