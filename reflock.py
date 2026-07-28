@@ -314,6 +314,12 @@ def parse_refs(idx: Index, rel: str) -> list[Ref]:
                 span = m.span("pin") if pin is not None else None
                 refs.append(Ref(rel, i + 1, kind, m.group("target"), pin, span,
                                  wiki=(pat is WIKI_LINK), col=m.start()))
+    # Patterns are applied in sequence, so a line carrying two *kinds* of
+    # reference came out grouped by kind rather than left to right - invisible
+    # for a single-kind line, since finditer is already left-to-right. Ordering
+    # is owned here so every consumer inherits it: check and explain used to sort
+    # differently and could list one line's references in different orders.
+    refs.sort(key=lambda r: (r.line, r.col))
     return refs
 
 
@@ -343,7 +349,7 @@ def resolve_wikilink(idx: Index, src: str, path_part: str) -> tuple[str | None, 
     return None, f"no such file: {path_part}"
 
 
-def unit_text(idx: Index, path: str, anchor: str | None) -> str | list | None:
+def unit_text(idx: Index, path: str, anchor: str | None) -> str | None:
     """Return the target unit's text, or None if the anchor doesn't resolve."""
     lines = idx.lines.get(path)
     if lines is None:
@@ -907,7 +913,7 @@ def cmd_explain(idx: Index, args) -> int:
     if lines is None or lineno > len(lines):
         print(f"error: {rel} has no line {lineno}", file=sys.stderr)
         return 2
-    refs = sorted((r for r in parse_refs(idx, rel) if r.line == lineno), key=lambda r: r.col)
+    refs = [r for r in parse_refs(idx, rel) if r.line == lineno]  # parse_refs owns the order
     if not refs:
         print(f"error: no reference on {rel}:{lineno}", file=sys.stderr)
         return 2
