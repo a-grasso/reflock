@@ -6,7 +6,7 @@
       "args": ["bash"],
       "expect_exit": 0,
       "expect_contains": [
-        "backlinks check completion explain stamp suspects",
+        "backlinks check completion explain setup stamp suspects",
         "complete -F _reflock_completion reflock"
       ]
     }

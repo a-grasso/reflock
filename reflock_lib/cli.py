@@ -10,7 +10,6 @@ from reflock_lib.commands import (
     BACKLINKS_RENDERERS,
     EXPLAIN_RENDERERS,
     RENDERERS,
-    ScopeError,
     UNIT_PREVIEW_LINES,
     cmd_backlinks,
     cmd_check,
@@ -18,6 +17,9 @@ from reflock_lib.commands import (
     cmd_stamp,
     cmd_suspects,
 )
+from reflock_lib.setup import cmd_setup
+
+SETUP_TARGETS = ("claude",)
 
 COMPLETION_SHELLS = ("bash", "zsh", "fish")
 
@@ -27,7 +29,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--version", action="version", version=f"reflock {__version__}")
     ap.add_argument("--root", default=".", help="tree root (default: git toplevel)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("check", help="report reference problems")
+    c = sub.add_parser("check", help="report reference problems",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="examples:\n"
+                              "  reflock check\n"
+                              "  reflock check docs/\n"
+                              "  reflock check --format json\n")
     c.add_argument("paths", nargs="*")
     c.add_argument("--json", action="store_true")
     c.add_argument("--format", choices=sorted(RENDERERS), default=None,
@@ -37,7 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
                    help="print nothing on success; one summary line to stderr on failure")
     c.add_argument("--no-color", action="store_true", help="disable colored output")
     c.set_defaults(fn=cmd_check)
-    s = sub.add_parser("stamp", help="fill / update fingerprints")
+    s = sub.add_parser("stamp", help="fill / update fingerprints",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="examples:\n"
+                              "  reflock stamp\n"
+                              "  reflock stamp --check\n"
+                              "  reflock stamp --rebless\n")
     s.add_argument("paths", nargs="*")
     s.add_argument("--rebless", action="store_true", help="re-hash existing pins too")
     s.add_argument("--check", action="store_true",
@@ -45,17 +57,31 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--warn", action="store_true",
                    help="with --check: report but always exit 0 (advisory)")
     s.set_defaults(fn=cmd_stamp)
-    sp = sub.add_parser("suspects", help="bare path-shaped tokens that don't resolve")
+    sp = sub.add_parser("suspects", help="bare path-shaped tokens that don't resolve",
+                        formatter_class=argparse.RawDescriptionHelpFormatter,
+                        epilog="examples:\n"
+                               "  reflock suspects\n"
+                               "  reflock suspects --all\n")
     sp.add_argument("paths", nargs="*")
     sp.add_argument("--all", action="store_true", help="scan every file, not just markdown")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(fn=cmd_suspects)
-    bl = sub.add_parser("backlinks", help="list references pointing at a path")
+    bl = sub.add_parser("backlinks", help="list references pointing at a path",
+                        formatter_class=argparse.RawDescriptionHelpFormatter,
+                        epilog="examples:\n"
+                               "  reflock backlinks docs/DESIGN.md\n"
+                               "  reflock backlinks docs/DESIGN.md#section\n"
+                               "  reflock backlinks docs/DESIGN.md --format json\n")
     bl.add_argument("path", help="repo-relative path, optionally with #anchor")
     bl.add_argument("--format", choices=sorted(BACKLINKS_RENDERERS), default=None,
                     help="output format (default: human)")
     bl.set_defaults(fn=cmd_backlinks)
-    ex = sub.add_parser("explain", help="everything about one reference")
+    ex = sub.add_parser("explain", help="everything about one reference",
+                        formatter_class=argparse.RawDescriptionHelpFormatter,
+                        epilog="examples:\n"
+                               "  reflock explain docs/a.md:12\n"
+                               "  reflock explain docs/a.md:12 --full\n"
+                               "  reflock explain docs/a.md:12 --format json\n")
     ex.add_argument("spec", help="<file>:<line>")
     ex.add_argument("--format", choices=sorted(EXPLAIN_RENDERERS), default=None,
                     help="output format (default: human)")
@@ -63,9 +89,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"print the whole unit text, not the first "
                          f"{UNIT_PREVIEW_LINES} lines")
     ex.set_defaults(fn=cmd_explain)
-    comp = sub.add_parser("completion", help="print a shell completion script")
+    comp = sub.add_parser("completion", help="print a shell completion script",
+                          formatter_class=argparse.RawDescriptionHelpFormatter,
+                          epilog="examples:\n"
+                                 "  reflock completion bash > /etc/bash_completion.d/reflock\n"
+                                 "  reflock completion zsh  > ~/.zsh/completions/_reflock\n")
     comp.add_argument("shell", choices=COMPLETION_SHELLS)
     comp.set_defaults(fn=cmd_completion, needs_index=False)
+    setup = sub.add_parser("setup", help="install/repair an agent session integration",
+                       formatter_class=argparse.RawDescriptionHelpFormatter,
+                       epilog="examples:\n"
+                              "  reflock setup claude\n")
+    setup.add_argument("target", choices=SETUP_TARGETS)
+    setup.set_defaults(fn=cmd_setup, needs_index=False)
     return ap
 
 
@@ -242,16 +278,16 @@ def cmd_completion(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv:
+        # Nothing at all, not even --root: the one input where "which
+        # subcommand did you mean" has an unambiguous, documented answer
+        # (README's own quickstart runs `check` first) rather than a guess.
+        argv = ["check"]
     ap = build_parser()
     args = ap.parse_args(argv)
     if getattr(args, "needs_index", True) is False:
         return args.fn(args)
     root = repo_root(args.root)
-    try:
-        return args.fn(build_index(root), args)
-    except ScopeError as e:
-        # Caught here rather than in each command: every path-scoped command
-        # funnels through one call, and exit 2 keeps "misconfigured invocation"
-        # distinct from 1 ("found problems") for CI.
-        print(e, file=sys.stderr)
-        return 2
+    return args.fn(build_index(root), args)

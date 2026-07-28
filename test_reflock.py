@@ -25,6 +25,7 @@ _spec.loader.exec_module(reflock)
 # it where the calling code actually looks it up.
 from reflock_lib import engine as reflock_engine
 from reflock_lib import cli as reflock_cli
+from reflock_lib import setup as reflock_setup
 
 
 class _TTYBuffer(io.StringIO):
@@ -91,6 +92,52 @@ class ReflockTest(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(out):
             reflock.main(["--version"])
         self.assertEqual(cm.exception.code, 0)
+        self.assertEqual(out.getvalue().strip(), f"reflock {reflock.__version__}")
+
+    # --- CLI-03: bare invocation defaults to check --------------------------
+    def test_bare_invocation_with_root_flag_still_requires_a_subcommand(self):
+        """--root + no subcommand is still a usage error (CLI-03 is scoped to
+        *fully* empty argv, not "no subcommand however it's spelled")."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            reflock.main(["--root", self.d])
+        self.assertEqual(2, cm.exception.code)
+        self.assertIn("cmd", err.getvalue())
+
+    def test_main_empty_list_runs_check_clean(self):
+        cwd = os.getcwd()
+        os.chdir(self.d)
+        try:
+            self.write("t.md", "# H\n\n## Real\n\nbody\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = reflock.main([])
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(0, rc)
+        self.assertEqual("\nAll references OK.\n", out.getvalue())
+
+    def test_main_empty_list_runs_check_dirty(self):
+        cwd = os.getcwd()
+        os.chdir(self.d)
+        try:
+            self.write("a.md", "See [x](missing.md).\n")
+            out_bare = io.StringIO()
+            with contextlib.redirect_stdout(out_bare):
+                rc_bare = reflock.main([])
+            out_check = io.StringIO()
+            with contextlib.redirect_stdout(out_check):
+                rc_check = reflock.main(["check"])
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(rc_check, rc_bare)
+        self.assertEqual(out_check.getvalue(), out_bare.getvalue())
+
+    def test_version_and_help_unaffected_by_bare_default(self):
+        out = io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(out):
+            reflock.main(["--version"])
+        self.assertEqual(0, cm.exception.code)
         self.assertEqual(out.getvalue().strip(), f"reflock {reflock.__version__}")
 
     def test_slugify_matches_github_double_hyphen(self):
@@ -725,6 +772,20 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(2, rc)
         self.assertIn("nope.md", err)
 
+    def test_backlinks_format_json_unknown_path_goes_to_stdout(self):
+        self.setup_docs_tree()
+        rc, out, err = self.run_cmd("backlinks", "docs/nope.md", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
+    def test_backlinks_format_json_unknown_anchor_goes_to_stdout(self):
+        self.setup_docs_tree()
+        rc, out, err = self.run_cmd("backlinks", "docs/t.md#no-such-anchor", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("no-such-anchor", json.loads(out)["error"])
+
     def test_repo_relative_path_works_from_a_subdirectory(self):
         """check prints repo-relative paths whatever directory it runs in, so
         pasting one into explain must work from a subdirectory too."""
@@ -1339,6 +1400,155 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(reflock.GITHUB_LEVEL["UNSTAMPED"], "warning")
         self.assertNotIn("OK", reflock.GITHUB_LEVEL)
 
+    # --- BUG-07: usage errors respect --format ------------------------------
+    def render_error(self, message, fmt):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            reflock.render_error(message, fmt)
+        return out.getvalue(), err.getvalue()
+
+    def test_render_error_json_prints_object_to_stdout(self):
+        out, err = self.render_error("no such path in tree: x", "json")
+        self.assertEqual("", err)
+        self.assertEqual({"error": "no such path in tree: x"}, json.loads(out))
+
+    def test_render_error_github_prints_annotation_to_stdout(self):
+        out, err = self.render_error("no such path in tree: x", "github")
+        self.assertEqual("", err)
+        self.assertEqual("::error::no such path in tree: x\n", out)
+
+    def test_render_error_github_escapes_message(self):
+        out, _ = self.render_error("a%b\r\nc", "github")
+        self.assertEqual("::error::a%25b%0D%0Ac\n", out)
+
+    def test_render_error_human_prints_prefixed_line_to_stderr(self):
+        out, err = self.render_error("no such path in tree: x", "human")
+        self.assertEqual("", out)
+        self.assertEqual("error: no such path in tree: x\n", err)
+
+    def test_check_format_json_scope_error_goes_to_stdout(self):
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", "--format", "json", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
+    def test_check_format_github_scope_error_is_an_annotation(self):
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", "--format", "github", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertTrue(out.startswith("::error::"))
+        self.assertIn("nope.md", out)
+
+    def test_check_default_format_scope_error_is_unchanged(self):
+        """Regression guard: human format keeps printing to stderr, not stdout."""
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", out)
+        self.assertIn("nope.md", err)
+
+    def test_check_quiet_verbose_conflict_uses_render_error(self):
+        rc, out, err = self.run_cmd("check", "--quiet", "--verbose")
+        self.assertEqual(2, rc)
+        self.assertEqual("", out)
+        self.assertIn("conflicts", err)
+
+    def test_stamp_format_has_no_json_shape_scope_error_stays_on_stderr(self):
+        """stamp has no --format flag; its errors are always human/stderr."""
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("stamp", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", out)
+        self.assertIn("nope.md", err)
+
+    def test_suspects_json_scope_error_goes_to_stdout(self):
+        """suspects' pre-existing --json flag is enough for intended_format to
+        route its ScopeError to stdout too, with no new flag added."""
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("suspects", "--json", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
+    # --- UX-03: next-step hints ---------------------------------------------
+    EXPLAIN_HINT = "Run `reflock explain <file>:<line>` for details on any of the above."
+    STAMP_HINT_FOR_CHECK = "Run `reflock stamp` to fill in UNSTAMPED pins."
+    STAMP_HINT_FOR_STAMP_CHECK = "Run `reflock stamp` to apply."
+
+    def test_check_hints_explain_on_dangling(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, out = self.run_check()
+        self.assertEqual(1, out.count(self.EXPLAIN_HINT), out)
+        self.assertNotIn(self.STAMP_HINT_FOR_CHECK, out)
+
+    def test_check_hints_stamp_on_unstamped(self):
+        self.write("t.md", "# H\n\nbody\n")
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        rc, out = self.run_check()
+        self.assertEqual(1, out.count(self.EXPLAIN_HINT), out)
+        self.assertEqual(1, out.count(self.STAMP_HINT_FOR_CHECK), out)
+
+    def test_check_hints_stamp_appears_once_for_multiple_unstamped(self):
+        self.write("t.md", "# H\n\nbody\n")
+        self.write("a.md", "See [x](t.md)<!--@-->.\nSee [y](t.md)<!--@-->.\n")
+        rc, out = self.run_check()
+        self.assertEqual(1, out.count(self.STAMP_HINT_FOR_CHECK), out)
+
+    def test_check_clean_tree_has_no_hints(self):
+        self.write("t.md", "# H\n\n## Real\n\nbody\n")
+        rc, out = self.run_check()
+        self.assertEqual(0, rc)
+        self.assertNotIn("reflock", out)
+        self.assertEqual("\nAll references OK.\n", out)
+
+    def test_check_format_json_unaffected_by_hints(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, findings = self.check_json()
+        self.assertEqual(1, rc)
+        self.assertEqual([{"verdict": "DANGLING", "file": "a.md", "line": 1,
+                            "target": "missing.md", "detail": "no such file: missing.md"}],
+                          findings)
+
+    def test_check_format_github_unaffected_by_hints(self):
+        self.write("a.md", "See [x](missing.md).\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "check", "--format", "github"])
+        out = buf.getvalue()
+        self.assertNotIn("Run `reflock", out)
+
+    def test_stamp_check_hints_apply(self):
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        self.write("t.md", "# T\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "stamp", "--check"])
+        self.assertIn(self.STAMP_HINT_FOR_STAMP_CHECK, buf.getvalue())
+
+    def test_stamp_check_warn_hints_apply_too(self):
+        """--warn only changes the exit code; stdout (hints included) matches
+        the non-warn run - the existing stdout-parity invariant, re-asserted."""
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        self.write("t.md", "# T\n")
+        buf1 = io.StringIO()
+        with contextlib.redirect_stdout(buf1):
+            reflock.main(["--root", self.d, "stamp", "--check"])
+        buf2 = io.StringIO()
+        with contextlib.redirect_stdout(buf2):
+            reflock.main(["--root", self.d, "stamp", "--check", "--warn"])
+        self.assertEqual(buf1.getvalue(), buf2.getvalue())
+        self.assertIn(self.STAMP_HINT_FOR_STAMP_CHECK, buf1.getvalue())
+
+    def test_stamp_check_nothing_has_no_hint(self):
+        self.write("t.md", "# T\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "stamp", "--check"])
+        out = buf.getvalue()
+        self.assertEqual("\nNothing to stamp.\n", out)
+
     # --- -q/--quiet --------------------------------------------------------
     def test_quiet_clean_tree_is_silent(self):
         self.write("t.md", "# H\n\n## Real\n\nbody\n")
@@ -1580,6 +1790,57 @@ class ReflockTest(unittest.TestCase):
         for shell in reflock.COMPLETION_SHELLS:
             self.assertTrue(reflock.completion_script(shell).strip())
 
+    # --- CLI-02: --help epilogs ---------------------------------------------
+    def help_text(self, *argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit) as cm:
+            reflock.main(list(argv) + ["--help"])
+        self.assertEqual(0, cm.exception.code)
+        return buf.getvalue()
+
+    def test_check_help_has_examples(self):
+        out = self.help_text("check")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock check", out)
+
+    def test_stamp_help_has_examples(self):
+        out = self.help_text("stamp")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock stamp", out)
+
+    def test_suspects_help_has_examples(self):
+        out = self.help_text("suspects")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock suspects", out)
+
+    def test_backlinks_help_has_examples(self):
+        out = self.help_text("backlinks")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock backlinks", out)
+
+    def test_explain_help_has_examples(self):
+        out = self.help_text("explain")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock explain", out)
+
+    def test_completion_help_has_examples(self):
+        out = self.help_text("completion")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock completion", out)
+
+    def test_completion_bash_help_still_exits_zero(self):
+        """A subcommand with a choices-constrained positional keeps parsing
+        correctly once its parent subparser gains an epilog."""
+        out = self.help_text("completion", "bash")
+        self.assertIn("usage: reflock completion", out)
+
+    def test_top_level_help_unchanged_by_subcommand_epilogs(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit) as cm:
+            reflock.main(["--help"])
+        self.assertEqual(0, cm.exception.code)
+        self.assertNotIn("examples:", buf.getvalue())
+
     def test_completion_writes_nothing_to_disk(self):
         before = set(os.listdir(self.d))
         buf = io.StringIO()
@@ -1663,6 +1924,35 @@ class ReflockTest(unittest.TestCase):
         rc, out, _ = self.run_backlinks("t.md")
         self.assertEqual(rc, 0)
         self.assertIn("no backlinks", out.lower())
+
+    def test_backlinks_none_has_no_trailing_count_line(self):
+        self.write("t.md", "# Title\n")
+        rc, out, _ = self.run_backlinks("t.md")
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "No backlinks to t.md.\n")
+
+    def test_backlinks_human_ends_with_count_line(self):
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\n")
+        rc, out, _ = self.run_backlinks("t.md")
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.endswith("\n\n1 backlink(s).\n"), out)
+
+    def test_backlinks_human_count_matches_row_count(self):
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\n")
+        self.write("b.md", "See [y](t.md).\n")
+        rc, out, _ = self.run_backlinks("t.md")
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.endswith("\n\n2 backlink(s).\n"), out)
+
+    def test_backlinks_format_json_unchanged_by_count_line(self):
+        """The human renderer gaining a count line must not leak into json."""
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md).\n")
+        rc, rows, _ = self.backlinks_json("t.md")
+        self.assertEqual(rc, 0)
+        self.assertEqual(rows, [{"file": "a.md", "line": 1, "target": "t.md", "pin": "unpinned"}])
 
     def test_backlinks_unknown_path_exits_nonzero(self):
         rc, out, err = self.run_backlinks("nope.md")
@@ -1769,6 +2059,32 @@ class ReflockTest(unittest.TestCase):
         rc, out, err = self.run_explain("a.md:99")
         self.assertNotEqual(rc, 0)
 
+    def test_explain_format_json_bad_spec_goes_to_stdout(self):
+        rc, out, err = self.run_explain("not-a-spec", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("not-a-spec", json.loads(out)["error"])
+
+    def test_explain_format_json_unknown_file_goes_to_stdout(self):
+        rc, out, err = self.run_explain("nope.md:1", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
+    def test_explain_format_json_out_of_range_line_goes_to_stdout(self):
+        self.write("a.md", "text\n")
+        rc, out, err = self.run_explain("a.md:99", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("a.md", json.loads(out)["error"])
+
+    def test_explain_format_json_no_reference_on_line_goes_to_stdout(self):
+        self.write("a.md", "no refs here\n")
+        rc, out, err = self.run_explain("a.md:1", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("a.md", json.loads(out)["error"])
+
     def test_explain_anchor_heading_span(self):
         self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n\n## Next\n\nmore\n")
         self.write("a.md", "See [d](t.md#decision).\n")
@@ -1791,6 +2107,111 @@ class ReflockTest(unittest.TestCase):
         before = self.read("a.md")
         self.run_explain("a.md:1")
         self.assertEqual(self.read("a.md"), before)
+
+
+class SetupClaudeTest(unittest.TestCase):
+    """ID-22: `reflock setup claude` installs/repairs the Stop-hook gate.
+
+    reflock_invocation()'s PATH-preference branch is intentionally untested
+    here - it depends on whether `reflock` happens to be on PATH on the
+    machine running the tests, so a real assertion needs shutil.which/
+    os.path.realpath mocked, which mostly re-asserts the mock. The pure
+    merge/render logic and cmd_setup's actual file effects are deterministic
+    and are what's covered below.
+    """
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def run_setup(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "setup", "claude"])
+        return rc, buf.getvalue()
+
+    def hook_path(self):
+        return os.path.join(self.d, ".claude", "hooks", "reflock-gate.sh")
+
+    def settings_path(self):
+        return os.path.join(self.d, ".claude", "settings.json")
+
+    # --- add_stop_hook() -----------------------------------------------
+    def test_add_stop_hook_to_empty_settings(self):
+        result = reflock_setup.add_stop_hook({})
+        self.assertEqual(
+            [{"matcher": "", "hooks": [{"type": "command",
+                                          "command": reflock_setup.STOP_HOOK_COMMAND}]}],
+            result["hooks"]["Stop"])
+
+    def test_add_stop_hook_preserves_sibling_hook_types(self):
+        settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}
+        result = reflock_setup.add_stop_hook(settings)
+        self.assertEqual(settings["hooks"]["PreToolUse"], result["hooks"]["PreToolUse"])
+        self.assertEqual(1, len(result["hooks"]["Stop"]))
+
+    def test_add_stop_hook_is_idempotent(self):
+        once = reflock_setup.add_stop_hook({})
+        twice = reflock_setup.add_stop_hook(once)
+        self.assertIs(once, twice)
+        self.assertEqual(1, len(twice["hooks"]["Stop"]))
+
+    def test_add_stop_hook_does_not_mutate_input(self):
+        settings = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}
+        before = json.dumps(settings)
+        reflock_setup.add_stop_hook(settings)
+        self.assertEqual(before, json.dumps(settings))
+
+    # --- render_hook_script() -------------------------------------------
+    def test_render_hook_script_embeds_invocation(self):
+        script = reflock_setup.render_hook_script("reflock")
+        self.assertIn('reflock_cmd="${REFLOCK:-reflock}"', script)
+
+    def test_render_hook_script_is_stable(self):
+        self.assertEqual(reflock_setup.render_hook_script("reflock"),
+                          reflock_setup.render_hook_script("reflock"))
+
+    # --- cmd_setup() end to end -----------------------------------------
+    def test_setup_writes_hook_and_settings_on_fresh_tree(self):
+        rc, out = self.run_setup()
+        self.assertEqual(0, rc)
+        self.assertIn("wrote", out)
+        self.assertIn("added Stop hook", out)
+        self.assertTrue(os.path.exists(self.hook_path()))
+        self.assertTrue(os.access(self.hook_path(), os.X_OK))
+        with open(self.settings_path()) as fh:
+            settings = json.load(fh)
+        self.assertEqual(1, len(settings["hooks"]["Stop"]))
+
+    def test_setup_second_run_is_a_no_op(self):
+        self.run_setup()
+        hook_mtime = os.path.getmtime(self.hook_path())
+        rc, out = self.run_setup()
+        self.assertEqual(0, rc)
+        self.assertIn("unchanged", out)
+        self.assertIn("already has the Stop hook", out)
+        self.assertEqual(hook_mtime, os.path.getmtime(self.hook_path()))
+
+    def test_setup_preserves_unrelated_settings_keys(self):
+        os.makedirs(os.path.dirname(self.settings_path()))
+        with open(self.settings_path(), "w") as fh:
+            json.dump({"permissions": {"allow": ["Bash(ls:*)"]}}, fh)
+        self.run_setup()
+        with open(self.settings_path()) as fh:
+            settings = json.load(fh)
+        self.assertEqual(["Bash(ls:*)"], settings["permissions"]["allow"])
+        self.assertEqual(1, len(settings["hooks"]["Stop"]))
+
+    def test_setup_rejects_invalid_json_without_overwriting(self):
+        os.makedirs(os.path.dirname(self.settings_path()))
+        with open(self.settings_path(), "w") as fh:
+            fh.write("{not valid json")
+        rc, out = self.run_setup()
+        self.assertEqual(2, rc)
+        with open(self.settings_path()) as fh:
+            self.assertEqual("{not valid json", fh.read())
 
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))

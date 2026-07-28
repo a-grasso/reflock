@@ -18,6 +18,8 @@ DRIFTED (1)
   doc/DESIGN.md:52   ../adr/0011-….md#decision   [pinned @a1b2c3d4, now @9f0e1d2c]
 
 2 problem(s).
+
+Run `reflock explain <file>:<line>` for details on any of the above.
 ```
 
 ---
@@ -192,6 +194,7 @@ REFLOCK_SRC=~/Projects/reflock ./install.sh
 Then, from any repo:
 
 ```bash
+reflock                # same as `reflock check` - the default with no subcommand
 reflock check          # report problems (exit 1 if any)
 reflock stamp          # fill empty pins
 reflock stamp --rebless doc/DESIGN.md   # accept current target state for these refs
@@ -214,12 +217,26 @@ fingerprints normally, since that direction is only a read.
 `--no-color` or set `NO_COLOR` (https://no-color.org) to turn that off, or pipe
 output anywhere and it's plain text automatically.
 
+Human output with at least one problem ends with a next-step hint pointing at
+`explain`, and a second one pointing at `stamp` if any finding is `UNSTAMPED`.
+A clean tree stays exactly `"All references OK."` - no hint on the path that
+needs none. `--format json`/`--format github` never carry hints; they're for
+callers that already know what they're doing next.
+
 `check --format <human|json|github>` selects the output format; `human` is the
 default. `--json` is a retained alias for `--format json`. Passing both is
 fine as long as they agree; passing `--json` with a conflicting `--format`
 exits nonzero with an error naming both flags. `github` emits GitHub Actions
 inline annotations - see [Three gates, three trust boundaries](#three-gates-three-trust-boundaries)
 below for the CI usage.
+
+A usage error (an unmatched path, a bad `explain` spec, an unknown `backlinks`
+target) is rendered in the same format that was requested: `--format json`
+prints `{"error": "..."}` on stdout, `--format github` prints one
+`::error::` annotation on stdout, and the default `human` format keeps
+printing `error: ...` to stderr. `stamp` and `suspects` have no `--format`
+flag, so their errors are always the plain stderr form (`suspects --json`'s
+pre-existing flag is the one exception - its errors follow `--json` too).
 
 `check -q` / `check --quiet` prints nothing on success; on failure it prints
 one summary line - `reflock: 1 of 137 references failed` - to **stderr** and
@@ -243,8 +260,10 @@ you'd invalidate. `<path>` accepts an anchor (`doc/DESIGN.md#section`) to
 narrow to references targeting that anchor specifically. Each line is the
 referring file and line, the target as written, and its pin state
 (`unpinned`, `unstamped`, or `pinned`) - pin state matters because an
-unpinned reference won't notice your edit. A path with no backlinks prints a
-clear "no backlinks" line and exits 0; a path absent from the index exits
+unpinned reference won't notice your edit. Human output ends with a trailing
+`N backlink(s).` count line, matching `check`/`stamp --check`/`suspects`. A
+path with no backlinks prints a clear "no backlinks" line and exits 0; a path
+absent from the index exits
 nonzero, since silently reporting zero backlinks for a typo'd filename would
 mislead. An `#anchor` that resolves to neither a heading nor a
 `reflock-anchor:` span exits nonzero for the same reason — "nothing points at
@@ -308,7 +327,8 @@ If you'd rather keep pre-commit advisory and enforce at pre-push, use
 `stamp --check` there instead of `check`: it computes exactly the edits
 `stamp` would make - a pin that's opted in but unstamped, or one whose hash
 would be rewritten - reports them, and writes nothing. Exit 0 means `stamp`
-would be a no-op.
+would be a no-op. When it isn't, output ends with a "Run `reflock stamp` to
+apply." hint - `"Nothing to stamp."` gets none, needing none.
 ```bash
 reflock stamp --check || echo "Some pins are stale; run 'reflock stamp'."
 ```
@@ -399,10 +419,12 @@ default format.
 **3. The Stop hook (the agent).** The one people forget. When an AI coding agent
 (e.g. Claude Code) edits your docs, it can *declare itself done* with references
 broken. A **Stop hook** blocks the agent from ending its turn until `reflock check`
-is clean — and feeds the failure back so the agent fixes it before finishing. See
-[`examples/hooks/`](examples/hooks/). The key subtlety is the loop-guard: honour
-the runner's "already retrying" flag so a genuinely unfixable state can't wedge
-the agent.
+is clean — and feeds the failure back so the agent fixes it before finishing. Run
+`reflock setup claude` to install and repair it (idempotent - safe to re-run after
+moving or reinstalling reflock), or see [`examples/hooks/`](examples/hooks/) for
+the raw files if you'd rather wire it by hand. The key subtlety is the loop-guard:
+honour the runner's "already retrying" flag so a genuinely unfixable state can't
+wedge the agent.
 
 ## Why the two-layer split matters
 
