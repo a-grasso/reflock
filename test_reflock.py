@@ -1743,6 +1743,57 @@ class ReflockTest(unittest.TestCase):
         for shell in reflock.COMPLETION_SHELLS:
             self.assertTrue(reflock.completion_script(shell).strip())
 
+    # --- CLI-02: --help epilogs ---------------------------------------------
+    def help_text(self, *argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit) as cm:
+            reflock.main(list(argv) + ["--help"])
+        self.assertEqual(0, cm.exception.code)
+        return buf.getvalue()
+
+    def test_check_help_has_examples(self):
+        out = self.help_text("check")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock check", out)
+
+    def test_stamp_help_has_examples(self):
+        out = self.help_text("stamp")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock stamp", out)
+
+    def test_suspects_help_has_examples(self):
+        out = self.help_text("suspects")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock suspects", out)
+
+    def test_backlinks_help_has_examples(self):
+        out = self.help_text("backlinks")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock backlinks", out)
+
+    def test_explain_help_has_examples(self):
+        out = self.help_text("explain")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock explain", out)
+
+    def test_completion_help_has_examples(self):
+        out = self.help_text("completion")
+        self.assertIn("examples:", out)
+        self.assertIn("  reflock completion", out)
+
+    def test_completion_bash_help_still_exits_zero(self):
+        """A subcommand with a choices-constrained positional keeps parsing
+        correctly once its parent subparser gains an epilog."""
+        out = self.help_text("completion", "bash")
+        self.assertIn("usage: reflock completion", out)
+
+    def test_top_level_help_unchanged_by_subcommand_epilogs(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit) as cm:
+            reflock.main(["--help"])
+        self.assertEqual(0, cm.exception.code)
+        self.assertNotIn("examples:", buf.getvalue())
+
     def test_completion_writes_nothing_to_disk(self):
         before = set(os.listdir(self.d))
         buf = io.StringIO()
