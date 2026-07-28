@@ -1,0 +1,12 @@
+{
+  "description": "BUG-03: stamp --check must not report pins it would refuse to write. On a tree whose only opted-in pins are unhashable, --check exits 0 and says there is nothing to stamp, instead of steering the user into fabricated fingerprints.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": ["--check"],
+      "expect_exit": 0,
+      "expect_contains": ["Nothing to stamp."],
+      "expect_not_contains": ["unstamped", "stale"]
+    }
+  ]
+}

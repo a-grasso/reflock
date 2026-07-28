@@ -526,6 +526,100 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- BUG-03: stamp must not fabricate a pin it cannot compute -----------
+    EMPTY_FP = "e3b0c442"  # fingerprint("") - what the bug wrote for everything
+
+    def test_stamp_skips_external_target(self):
+        self.write("a.md", "See [x](https://example.com/spec)<!--@-->\n")
+        self.stamp()
+        self.assertIn("<!--@-->", self.read("a.md"))
+        self.assertNotIn(self.EMPTY_FP, self.read("a.md"))
+
+    def test_stamp_skips_outside_tree_target(self):
+        self.write("a.md", "See [y](../outside.md)<!--@-->\n")
+        self.stamp()
+        self.assertIn("<!--@-->", self.read("a.md"))
+
+    def test_stamp_skips_directory_target(self):
+        self.write("sub/k.md", "# K\n")
+        self.write("a.md", "See [z](sub)<!--@-->\n")
+        self.stamp()
+        self.assertIn("<!--@-->", self.read("a.md"))
+
+    def test_stamp_skips_binary_target(self):
+        with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
+            fh.write(b"\x00\x01binary")
+        self.write("a.md", "See [b](blob.bin)<!--@-->\n")
+        self.stamp()
+        self.assertIn("<!--@-->", self.read("a.md"))
+
+    def test_stamp_skips_unresolvable_anchor(self):
+        self.write("t.md", "# Title\n")
+        self.write("a.md", "See [x](t.md#no-such-heading)<!--@-->\n")
+        self.stamp()
+        self.assertIn("<!--@-->", self.read("a.md"))
+
+    def test_unstampable_pin_detail_does_not_prescribe_stamp(self):
+        """check must not tell the user to run a command that provably no-ops."""
+        with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
+            fh.write(b"\x00\x01binary")
+        self.write("a.md", "See [b](blob.bin)<!--@-->\n")
+        verdict, detail = self.verdicts("a.md")[0]
+        self.assertEqual("UNSTAMPED", verdict)
+        self.assertNotIn("reflock stamp", detail)
+        self.assertIn("cannot fingerprint", detail)
+
+    def test_ordinary_unstamped_pin_still_prescribes_stamp(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [x](t.md)<!--@-->\n")
+        verdict, detail = self.verdicts("a.md")[0]
+        self.assertEqual("UNSTAMPED", verdict)
+        self.assertIn("reflock stamp", detail)
+
+    def test_plan_stamp_has_no_edits_for_unhashable_pins(self):
+        self.write("sub/k.md", "# K\n")
+        self.write("a.md", "[a](https://example.com)<!--@-->\n"
+                            "[b](../outside.md)<!--@-->\n"
+                            "[c](sub)<!--@-->\n")
+        idx = reflock.build_index(self.d)
+        args = types.SimpleNamespace(paths=[], rebless=False)
+        edits, report = reflock.plan_stamp(idx, args)
+        self.assertEqual({}, edits)
+        self.assertEqual([], report)
+
+    def test_stamp_does_stamp_a_genuinely_empty_file(self):
+        """The positive control: empty is honest, unhashable is not."""
+        self.write("empty.md", "")
+        self.write("a.md", "See [e](empty.md)<!--@-->\n")
+        self.stamp()
+        self.assertIn(f"<!--@{self.EMPTY_FP}-->", self.read("a.md"))
+
+    def test_rebless_does_not_fabricate_on_unhashable_target(self):
+        self.write("a.md", "See [x](https://example.com/spec)<!--@deadbeef-->\n")
+        self.stamp("--rebless")
+        self.assertIn("<!--@deadbeef-->", self.read("a.md"))
+
+    def test_stamp_check_ignores_unhashable_pins(self):
+        self.write("a.md", "See [x](https://example.com/spec)<!--@-->\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = reflock.main(["--root", self.d, "stamp", "--check"])
+        self.assertEqual(0, rc)
+        self.assertIn("Nothing to stamp", buf.getvalue())
+
+    def test_stamp_resolves_through_the_same_resolver_as_check(self):
+        """A wiki-link resolving by unique basename must be hashed against the
+        path classify resolved, not a path stamp re-derived for itself."""
+        self.write("docs/loader.md", "# Loader\n\nreal content\n")
+        self.write("a.md", "See [[loader]]<!--@-->\n")
+        idx = reflock.build_index(self.d)
+        ref = reflock.parse_refs(idx, "a.md")[0]
+        _, path, anchor, _ = reflock.resolve_target(idx, ref)
+        self.assertEqual("docs/loader.md", path)
+        self.stamp()
+        expected = reflock.fingerprint(reflock.unit_text(idx, path, anchor))
+        self.assertIn(f"<!--@{expected}-->", self.read("a.md"))
+
     def test_unpinned_code_ref_has_no_pin(self):
         self.write("t.md", "# H\n\n## Sec\n\nbody\n")
         self.write("caller.py", "# REF: t.md#sec\n")

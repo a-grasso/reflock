@@ -395,6 +395,11 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
     if ref.pin is None:
         return "OK", "unpinned"
     if ref.pin == "":
+        if path not in idx.lines:
+            # An indexed file with no text: `stamp` refuses to hash it (BUG-03),
+            # so prescribing `reflock stamp` here would name a command that
+            # provably does nothing.
+            return "UNSTAMPED", f"cannot fingerprint: no indexed text in {path}"
         return "UNSTAMPED", "run: reflock stamp"
     actual = fingerprint(unit)
     if actual != ref.pin:
@@ -547,6 +552,27 @@ def cmd_check(idx: Index, args) -> int:
     return RENDERERS[fmt](results, problems, args)
 
 
+def stampable_unit(idx: Index, ref: Ref) -> str | None:
+    """The text `stamp` would hash for this reference, or None if there is
+    nothing it can honestly hash.
+
+    Resolution goes through resolve_target — the same function classify() uses —
+    so a reference cannot resolve one way for `check` and another for `stamp`.
+    Deriving the path here independently is what let `stamp` write
+    fingerprint("") into external, outside-tree, directory and binary targets
+    while `check` reported them OK and never contradicted the pin.
+
+    None means "not hashable", which is not the same as "hashes to empty": a
+    genuinely empty text file has fingerprint("") and is stamped normally.
+    """
+    kind, path, anchor, _ = resolve_target(idx, ref)
+    if kind != "file":
+        return None            # external, outside the tree, a dir, or dangling
+    if path not in idx.lines:
+        return None            # exists but carries no indexed text (binary)
+    return unit_text(idx, path, anchor)   # None again if the anchor misses
+
+
 def plan_stamp(idx: Index, args):
     """Compute the edits `stamp` would make, without writing anything.
 
@@ -563,17 +589,9 @@ def plan_stamp(idx: Index, args):
                 continue                       # not opted in
             if ref.pin != "" and not args.rebless:
                 continue                       # existing pin, no --rebless
-            verdict, _ = classify(idx, ref)
-            if verdict == "DANGLING":
-                continue
-            path_part, _, anchor = ref.target.partition("#")
-            if ref.target.startswith("#"):
-                path = ref.src
-            elif ref.wiki:
-                path, _ = resolve_wikilink(idx, ref.src, path_part)
-            else:
-                path = resolve_path(ref.src, path_part)
-            unit = unit_text(idx, path, (ref.target[1:] if ref.target.startswith("#") else anchor) or None)
+            unit = stampable_unit(idx, ref)
+            if unit is None:
+                continue                       # nothing honest to hash
             fp = fingerprint(unit)
             if fp != ref.pin:
                 kind = "unstamped" if ref.pin == "" else "stale"
