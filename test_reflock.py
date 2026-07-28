@@ -527,6 +527,103 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- PERF-01: one fingerprint per distinct unit --------------------------
+    def big_target(self, rel="t.md", body="lorem ipsum dolor sit amet "):
+        self.write(rel, "# Title\n\n## Sec\n\n" + (body * 4 + "\n") * 40)
+
+    def count_normalize_calls(self):
+        """Wrap reflock.normalize with a counter; returns (ctx, counter)."""
+        calls = []
+        real = reflock.normalize
+
+        def counting(text):
+            calls.append(text)
+            return real(text)
+        return mock.patch.object(reflock, "normalize", counting), calls
+
+    def test_one_normalize_per_distinct_unit(self):
+        self.big_target()
+        # pinned, not unstamped: classify returns before hashing an empty pin
+        self.write("a.md", "".join(f"See [x{i}](t.md#sec)<!--@deadbeef-->\n"
+                                    for i in range(20)))
+        idx = reflock.build_index(self.d)
+        refs = reflock.parse_refs(idx, "a.md")
+        self.assertEqual(20, len(refs))
+        patcher, calls = self.count_normalize_calls()
+        with patcher:
+            for ref in refs:
+                reflock.classify(idx, ref)
+        self.assertEqual(1, len(calls),
+                          f"20 references to one unit hashed it {len(calls)} times")
+
+    def test_one_normalize_per_anchor_when_units_differ(self):
+        self.write("t.md", "# T\n\n## One\n\naaa\n\n## Two\n\nbbb\n")
+        self.write("a.md", "See [a](t.md#one)<!--@deadbeef-->\n"
+                            "See [b](t.md#two)<!--@deadbeef-->\n"
+                            "Again [c](t.md#one)<!--@deadbeef-->\n")
+        idx = reflock.build_index(self.d)
+        patcher, calls = self.count_normalize_calls()
+        with patcher:
+            for ref in reflock.parse_refs(idx, "a.md"):
+                reflock.classify(idx, ref)
+        self.assertEqual(2, len(calls), "one hash per distinct anchor, no more, no fewer")
+
+    def test_fingerprint_cache_is_per_index(self):
+        self.big_target()
+        self.write("a.md", "See [x](t.md#sec)<!--@deadbeef-->\n")
+        for _ in range(2):
+            idx = reflock.build_index(self.d)
+            patcher, calls = self.count_normalize_calls()
+            with patcher:
+                reflock.classify(idx, reflock.parse_refs(idx, "a.md")[0])
+            self.assertEqual(1, len(calls), "a fresh Index must recompute")
+
+    def test_memoized_verdicts_match_hand_computed(self):
+        self.write("t.md", "# T\n\n## Sec\n\ncontent here\n")
+        idx0 = reflock.build_index(self.d)
+        fp = reflock.fingerprint(reflock.unit_text(idx0, "t.md", "sec"))
+        self.write("a.md", f"ok [a](t.md#sec)<!--@{fp}-->\n"
+                            f"drift [b](t.md#sec)<!--@deadbeef-->\n"
+                            f"same [c](t.md#sec)<!--@{fp}-->\n")
+        self.assertEqual(["OK", "DRIFTED", "OK"],
+                          [v for v, _ in self.verdicts("a.md")])
+
+    def test_drift_detected_after_edit_within_one_process(self):
+        self.write("t.md", "# T\n\n## Sec\n\nbefore\n")
+        idx = reflock.build_index(self.d)
+        fp = reflock.fingerprint(reflock.unit_text(idx, "t.md", "sec"))
+        self.write("a.md", f"See [x](t.md#sec)<!--@{fp}-->\n")
+        self.assertEqual("OK", self.verdict("a.md"))
+        self.write("t.md", "# T\n\n## Sec\n\nafter, quite different\n")
+        self.assertEqual("DRIFTED", self.verdict("a.md"),
+                          "a fresh index must see the edit")
+
+    def test_fingerprint_after_stamp_reflects_disk(self):
+        self.write("t.md", "# T\n\n## Sec\n\nbody\n")
+        self.write("a.md", "See [x](t.md#sec)<!--@-->\n")
+        idx = reflock.build_index(self.d)
+        args = types.SimpleNamespace(paths=[], rebless=False, check=False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            reflock.cmd_stamp(idx, args)
+        ref = reflock.parse_refs(idx, "a.md")[0]
+        self.assertEqual("OK", reflock.classify(idx, ref)[0])
+
+    def test_normalize_equivalence_across_whitespace_classes(self):
+        """The new normalize must not move a single fingerprint in the field."""
+        def old(text):
+            text = reflock.PIN_STRIP.sub("", text)
+            return re.sub(r"\s+", " ", text).strip().encode("utf-8")
+        cases = [
+            "", "   ", "one   two\nthree", "a\tb\r\nc", "trailing   ",
+            "  leading", "text<!--@a1b2c3d4-->more", "code @a1b2c3d4 here",
+            "a\x1cb", "a\x1db", "a\x1eb", "a\x1fb", "a\x85b", "a\xa0b",
+            "a b", "a b", "a  b", "mixed \x0b\x0c stuff",
+            "# H\n\n## Sec\n\nOne two\nthree      four.\n",
+        ]
+        for text in cases:
+            self.assertEqual(old(text), reflock.normalize(text),
+                              f"normalize changed for {text!r}")
+
     # --- BUG-05: stamp must not rewrite bytes it is not stamping -------------
     def write_bytes(self, rel, data: bytes):
         p = os.path.join(self.d, rel)

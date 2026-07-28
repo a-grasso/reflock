@@ -258,10 +258,10 @@ items:
     source: review 2026-07-28
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/PERF-01-fingerprint-memoization.md
     blocked_by: [BUG-03]
-    touches: [reflock.py, test_reflock.py]
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
     note: >-
       400 pinned references to one 4MB file take 56s, all of it in
       classify(); the module docstring promises "grep, a hashmap lookup and a

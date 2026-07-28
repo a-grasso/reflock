@@ -117,6 +117,9 @@ class Index:
     spans: dict[str, dict[str, tuple[int, int]]] = field(default_factory=dict)
     ignored: set[str] = field(default_factory=set)  # scanned as targets, not as sources
     symlinks: set[str] = field(default_factory=set)  # ditto: readable, never written
+    # (path, anchor) -> fingerprint, so N references to one unit hash it once.
+    # On the Index, not module state: an Index is one snapshot of one tree.
+    fps: dict[tuple[str, str | None], str] = field(default_factory=dict)
 
 
 # --- helpers -----------------------------------------------------------------
@@ -192,9 +195,16 @@ def slugify(text: str) -> str:
 
 
 def normalize(text: str) -> bytes:
-    """Whitespace- and pin-invariant form for hashing."""
-    text = PIN_STRIP.sub("", text)
-    return re.sub(r"\s+", " ", text).strip().encode("utf-8")
+    """Whitespace- and pin-invariant form for hashing.
+
+    `" ".join(text.split())` rather than `re.sub(r"\\s+", " ", …).strip()`: the
+    regex pass was the entire per-unit hashing cost (~0.14s for 4 MB, against
+    ~5ms for the sha256 itself). str.split() collapses the same whitespace
+    classes in C; a test asserts the two forms agree byte for byte, including on
+    \\x1c-\\x1f, \\x85 and \\xa0, because a disagreement would silently invalidate
+    every pin in the field.
+    """
+    return " ".join(PIN_STRIP.sub("", text).split()).encode("utf-8")
 
 
 def fingerprint(text: str) -> str:
@@ -354,6 +364,22 @@ def unit_text(idx: Index, path: str, anchor: str | None) -> str | list | None:
     return None
 
 
+def unit_fingerprint(idx: Index, path: str, anchor: str | None) -> str | None:
+    """Fingerprint of one unit, computed at most once per Index.
+
+    The design is "many references, one authority", so the most-cited file in a
+    tree is the one that was rehashed most: 400 references to a 4 MB file spent
+    56s in classify(), all of it re-normalizing the same bytes.
+    """
+    key = (path, anchor)
+    if key in idx.fps:
+        return idx.fps[key]
+    unit = unit_text(idx, path, anchor)
+    fp = None if unit is None else fingerprint(unit)
+    idx.fps[key] = fp
+    return fp
+
+
 def resolve_target(idx: Index, ref: Ref) -> tuple[str, str | None, str | None, str | None]:
     """Resolve ref.target down to (kind, path, anchor, detail).
 
@@ -396,8 +422,8 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
         return "OK", "dir"
     if kind == "dangling":
         return "DANGLING", detail
-    unit = unit_text(idx, path, anchor)
-    if unit is None:
+    actual = unit_fingerprint(idx, path, anchor)
+    if actual is None:
         return "DANGLING", f"no anchor '#{anchor}' in {path}"
     if ref.pin is None:
         return "OK", "unpinned"
@@ -408,7 +434,6 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
             # provably does nothing.
             return "UNSTAMPED", f"cannot fingerprint: no indexed text in {path}"
         return "UNSTAMPED", "run: reflock stamp"
-    actual = fingerprint(unit)
     if actual != ref.pin:
         return "DRIFTED", f"pinned @{ref.pin}, now @{actual}"
     return "OK", "pinned"
@@ -590,9 +615,9 @@ def cmd_check(idx: Index, args) -> int:
     return RENDERERS[fmt](results, problems, args)
 
 
-def stampable_unit(idx: Index, ref: Ref) -> str | None:
-    """The text `stamp` would hash for this reference, or None if there is
-    nothing it can honestly hash.
+def stampable_fingerprint(idx: Index, ref: Ref) -> str | None:
+    """The fingerprint `stamp` would write for this reference, or None if there
+    is nothing it can honestly hash.
 
     Resolution goes through resolve_target — the same function classify() uses —
     so a reference cannot resolve one way for `check` and another for `stamp`.
@@ -608,7 +633,7 @@ def stampable_unit(idx: Index, ref: Ref) -> str | None:
         return None            # external, outside the tree, a dir, or dangling
     if path not in idx.lines:
         return None            # exists but carries no indexed text (binary)
-    return unit_text(idx, path, anchor)   # None again if the anchor misses
+    return unit_fingerprint(idx, path, anchor)   # None again if the anchor misses
 
 
 def plan_stamp(idx: Index, args):
@@ -627,10 +652,9 @@ def plan_stamp(idx: Index, args):
                 continue                       # not opted in
             if ref.pin != "" and not args.rebless:
                 continue                       # existing pin, no --rebless
-            unit = stampable_unit(idx, ref)
-            if unit is None:
+            fp = stampable_fingerprint(idx, ref)
+            if fp is None:
                 continue                       # nothing honest to hash
-            fp = fingerprint(unit)
             if fp != ref.pin:
                 kind = "unstamped" if ref.pin == "" else "stale"
                 edits_by_rel.setdefault(rel, {}).setdefault(ref.line - 1, []).append((*ref.pin_span, fp))
@@ -669,6 +693,12 @@ def cmd_stamp(idx: Index, args) -> int:
         with open(ap, "w", encoding="utf-8", newline="") as fh:
             fh.write(text)
         idx.lines[rel] = text.splitlines()   # keep the index consistent
+    # Belt and braces, not load-bearing: PIN_STRIP removes pins before hashing,
+    # which is why stamping never cascades drift, so no cached fingerprint can
+    # actually have been invalidated by the writes above. Dropping the cache
+    # anyway keeps "the Index reflects the tree" true without needing that
+    # argument to hold.
+    idx.fps.clear()
     print(f"Stamped {changed} pin(s).")
     return 0
 
@@ -747,9 +777,8 @@ def explain_entry(idx: Index, ref: Ref) -> dict:
     else:
         entry["pin"] = "unpinned"
     if ref.pin is not None:
-        unit = unit_text(idx, path, anchor)
-        entry["unit_text"] = unit
-        entry["current"] = fingerprint(unit) if unit is not None else None
+        entry["unit_text"] = unit_text(idx, path, anchor)
+        entry["current"] = unit_fingerprint(idx, path, anchor)
     return entry
 
 
