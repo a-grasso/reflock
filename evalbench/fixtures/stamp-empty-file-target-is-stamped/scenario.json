@@ -1,0 +1,20 @@
+{
+  "description": "BUG-03 positive control: 'unhashable' must not swallow 'hashes to empty'. A reference to a genuinely empty .md file is stamped normally, and e3b0c442 is the honest fingerprint of its content - the skip list has to distinguish the two.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["Stamped 1 pin(s)."],
+      "expect_file_regex": {
+        "a.md": "<!--@e3b0c442-->"
+      }
+    },
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": ["All references OK."]
+    }
+  ]
+}
