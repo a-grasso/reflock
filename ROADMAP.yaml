@@ -176,9 +176,11 @@ items:
     source: agent-reported (grind iterations 3, 5, 7, 8)
     tier: near
     owner: agent
-    status: needs-spec
+    status: done
+    contract: roadmap/BENCH-01-bench-primitives.md
     blocked_by: []
-    touches: [evalbench/run_bench.py, evalbench/README.md]
+    touches: [evalbench/run_bench.py, evalbench/README.md, test_reflock.py,
+              evalbench/fixtures/]
     note: >-
       run_bench.py's step schema exposes only expect_json, expect_contains and
       expect_not_contains, all of which inspect stdout. Two capabilities the
@@ -193,10 +195,185 @@ items:
       stdout does NOT contain it; NS-04's github-format annotations have the
       same stream-destination problem. Every one of those assertions is
       weaker than the contract it claims to satisfy, and a regression that
-      moved output between streams would pass the bench today. Needs a
-      contract specifying the new step primitives (at minimum expect_stderr
-      /expect_stderr_empty and a same-as-step-N stdout comparison), then a
-      follow-up pass to tighten the four approximated fixtures.
+      moved output between streams would pass the bench today. Contract also
+      closes a hole found while specifying it: check_step reads assertions
+      with .get(), so an unrecognised key (one typo) is silently ignored and
+      the fixture passes having asserted nothing.
+
+  # --- review of branch grind-near-tier, 2026-07-28 --------------------------
+  # Findings from a multi-dimension review of PR #12. Sequenced so the harness
+  # gap closes first (three of these need assertions it cannot express today)
+  # and the shared resolution bug closes before the items that build on it.
+  - id: BUG-03
+    title: stamp fabricates a pin for targets it cannot hash
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-03-fabricated-pins.md
+    blocked_by: [BENCH-01]
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      plan_stamp() re-derives the target path instead of using
+      resolve_target(), so for an external, outside-tree, directory or binary
+      target it hashes the empty string and writes e3b0c442 into the file.
+      check() returns OK before the hash compare, so it never contradicts the
+      fabricated pin - a silent false negative on the tool's core promise.
+      Fixing it by unifying the two call sites also removes the duplication
+      PR #12 flagged as a review risk.
+
+  - id: BUG-04
+    title: check exits 0 when a path argument matches nothing
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-04-unmatched-scope.md
+    blocked_by: [BENCH-01]
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      scoped_files() prefix-filters the index and yields nothing for an
+      unmatched path, so `reflock check docs/` keeps passing after docs/ is
+      renamed - the exact stale-reference rot reflock exists to catch, in
+      reflock's own CI contract.
+
+  - id: BUG-05
+    title: stamp rewrites bytes it is not stamping
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-05-write-path-fidelity.md
+    blocked_by: [BENCH-01]
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Two defects in one write path. cmd_stamp round-trips the whole file
+      through universal-newline decoding, so stamping one pin converts every
+      CRLF in the file to LF; and it follows tracked symlinks, so it can
+      modify a file outside the repository with git status showing nothing.
+
+  - id: PERF-01
+    title: check re-hashes the same target unit once per reference
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/PERF-01-fingerprint-memoization.md
+    blocked_by: [BUG-03]
+    touches: [reflock.py, test_reflock.py]
+    note: >-
+      400 pinned references to one 4MB file take 56s, all of it in
+      classify(); the module docstring promises "grep, a hashmap lookup and a
+      byte compare". Memoizing on (path, anchor) is the fix. Sequenced after
+      BUG-03 because both rewrite the same resolution path.
+
+  - id: NS-03b
+    title: stamp --check --warn, so the shipped advisory hook is advisory
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/NS-03b-warn-mode.md
+    blocked_by: []
+    touches: [reflock.py, test_reflock.py, .pre-commit-hooks.yaml, README.md,
+              evalbench/fixtures/]
+    note: >-
+      Human-decided 2026-07-28. D6 titles the shipped manifest "advisory" but
+      reflock-stamp-check hard-fails a push, because pre-commit has no
+      warn-only mode and reflock had no exit-0 reporting mode. Adding --warn
+      gives the manifest something genuinely advisory to call, so D6 is
+      satisfied as written rather than amended.
+
+  - id: CLI-01
+    title: backlinks and explain reject path forms check accepts
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/CLI-01-path-forms.md
+    blocked_by: [BENCH-01]
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Both compare the raw argument against idx.files, so `./docs/t.md` and
+      any cwd-relative path from a subdirectory error out while `check` on the
+      same path works. backlinks also reports zero backlinks for a misspelled
+      #anchor, which its own README paragraph argues is misleading.
+
+  - id: UX-01
+    title: explain dumps the whole target file for a whole-file pin
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/UX-01-explain-unit-truncation.md
+    blocked_by: []
+    touches: [reflock.py, test_reflock.py, README.md, evalbench/fixtures/]
+    note: >-
+      The unit text is the point of `explain` for an anchored reference and
+      unusable for an unanchored one - a pinned reference to a 2000-line
+      design doc prints 2000 lines.
+
+  - id: TEST-01
+    title: the fish completion parity test is satisfied by a comment it forced
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/TEST-01-completion-parity.md
+    blocked_by: []
+    touches: [reflock.py, test_reflock.py]
+    note: >-
+      fish spells flags `-l format`, so `--format` appears only in a trailing
+      `# --format` comment that exists to satisfy assertIn. Deleting the
+      comment as cleanup breaks the suite. Same test cannot see that
+      positional choices (completion's shell argument) are never completed,
+      and there is no fish syntax check where bash and zsh both have one.
+
+  - id: BUG-06
+    title: suspects scans inside inline code spans
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-06-suspects-code-spans.md
+    blocked_by: []
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      BUG-02 exempted code spans from reference parsing per D2; cmd_suspects
+      still scans raw lines, so a path named in backticks in prose is a
+      suspect. Strictly fewer false positives, which is D2's own rationale.
+
+  - id: DOC-01
+    title: the documented pre-commit rev names a tag without the manifest
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/DOC-01-precommit-rev.md
+    blocked_by: [NS-03b]
+    touches: [README.md, reflock.py, test_reflock.py]
+    note: >-
+      README pins `rev: v0.1.0`; .pre-commit-hooks.yaml exists in no tag
+      (v0.1.0..v0.1.4) nor on main, so the documented config fails with
+      InvalidManifestError. Human-decided 2026-07-28: bump to 0.1.5 and point
+      the README at v0.1.5; the tag itself is cut by a human after merge.
+      Sequenced after NS-03b because that item changes which entry the
+      manifest calls.
+
+  - id: NIT-01
+    title: review nits - wrong annotation, unordered refs on a line
+    source: review 2026-07-28
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/NIT-01-review-nits.md
+    blocked_by: [BUG-03, CLI-01, UX-01]
+    touches: [reflock.py, test_reflock.py]
+    note: >-
+      Two leftovers too small for their own items: unit_text is annotated
+      `str | list | None` but never returns a list, and parse_refs appends
+      per-pattern so refs on one line are not in column order - explain sorts
+      them, check does not. Last so it cannot conflict with the items above.
 
   # --- done ------------------------------------------------------------------
   - id: BUG-01
