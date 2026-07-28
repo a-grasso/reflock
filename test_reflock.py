@@ -526,6 +526,100 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "stamp", "--check"])
         self.assertEqual(rc, 0)
 
+    # --- BUG-04: a path argument matching nothing is a usage error -----------
+    def run_cmd(self, *argv):
+        """Run a subcommand capturing both streams; returns (rc, stdout, stderr)."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, *argv])
+        return rc, out.getvalue(), err.getvalue()
+
+    # Path args resolve against the process CWD, not --root (see
+    # test_scoped_check_limits_to_path_arg), so these pass absolute paths.
+    def at(self, rel):
+        return os.path.join(self.d, rel)
+
+    def test_check_unmatched_path_exits_two(self):
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", self.at("does-not-exist.md"))
+        self.assertEqual(2, rc)
+        self.assertIn("does-not-exist.md", err)
+        self.assertEqual("", out)
+
+    def test_check_unmatched_dir_exits_two(self):
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", self.at("nosuchdir/"))
+        self.assertEqual(2, rc)
+        self.assertIn("nosuchdir/", err, "the message must echo what the user typed")
+
+    def test_stamp_unmatched_path_exits_two(self):
+        self.write("t.md", "# T\n")
+        rc, _, err = self.run_cmd("stamp", self.at("does-not-exist.md"))
+        self.assertEqual(2, rc)
+        self.assertIn("does-not-exist.md", err)
+
+    def test_suspects_unmatched_path_exits_two(self):
+        self.write("t.md", "# T\n")
+        rc, _, err = self.run_cmd("suspects", self.at("does-not-exist.md"))
+        self.assertEqual(2, rc)
+        self.assertIn("does-not-exist.md", err)
+
+    def test_one_bad_path_among_good_ones_still_errors(self):
+        """reflock must not do half the work and report success."""
+        self.write("a.md", "See [x](missing.md)\n")
+        rc, out, err = self.run_cmd("check", self.at("a.md"),
+                                     self.at("does-not-exist.md"))
+        self.assertEqual(2, rc)
+        self.assertIn("does-not-exist.md", err)
+        self.assertEqual("", out)
+
+    def test_tree_root_path_means_whole_tree(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        rc_root, out_root, _ = self.run_cmd("check", self.d)
+        rc_bare, out_bare, _ = self.run_cmd("check")
+        self.assertEqual(rc_bare, rc_root)
+        self.assertEqual(out_bare, out_root)
+        self.assertIn("DANGLING", out_root)
+
+    def test_literal_dot_means_whole_tree(self):
+        """`reflock check .` reads as the whole tree and must behave that way;
+        it previously normalized to a path no indexed file matched, so it
+        checked nothing and exited 0."""
+        self.write("a.md", "See [x](missing.md)\n")
+        cwd = os.getcwd()
+        try:
+            os.chdir(self.d)
+            rc, out, _ = self.run_cmd("check", ".")
+        finally:
+            os.chdir(cwd)
+        self.assertEqual(1, rc)
+        self.assertIn("DANGLING", out)
+
+    def test_explicit_binary_path_is_not_an_error(self):
+        with open(self.at("blob.bin"), "wb") as fh:
+            fh.write(b"\x00\x01binary")
+        rc, _, err = self.run_cmd("check", self.at("blob.bin"))
+        self.assertEqual(0, rc, err)
+
+    def test_explicit_reflockignored_path_is_not_an_error(self):
+        self.write(".reflockignore", "vendor/*\n")
+        self.write("vendor/v.md", "See [x](missing.md)\n")
+        rc, _, err = self.run_cmd("check", self.at("vendor/v.md"))
+        self.assertEqual(0, rc, err)
+
+    def test_dir_of_only_ignored_files_is_not_an_error(self):
+        self.write(".reflockignore", "vendor/*\n")
+        self.write("vendor/v.md", "See [x](missing.md)\n")
+        rc, _, err = self.run_cmd("check", self.at("vendor"))
+        self.assertEqual(0, rc, err)
+
+    def test_scoped_files_raises_for_unmatched_path(self):
+        self.write("t.md", "# T\n")
+        idx = reflock.build_index(self.d)
+        with self.assertRaises(reflock.ScopeError):
+            reflock.scoped_files(idx, [self.at("does-not-exist.md")])
+        self.assertEqual(["t.md"], reflock.scoped_files(idx, [self.at("t.md")]))
+
     # --- BUG-03: stamp must not fabricate a pin it cannot compute -----------
     EMPTY_FP = "e3b0c442"  # fingerprint("") - what the bug wrote for everything
 
