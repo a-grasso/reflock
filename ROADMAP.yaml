@@ -321,10 +321,10 @@ items:
     source: review 2026-07-28
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/TEST-01-completion-parity.md
     blocked_by: []
-    touches: [reflock.py, test_reflock.py]
+    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
     note: >-
       fish spells flags `-l format`, so `--format` appears only in a trailing
       `# --format` comment that exists to satisfy assertIn. Deleting the

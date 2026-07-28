@@ -1377,17 +1377,114 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(reflock.normalize("one   two\nthree"), b"one two three")
         self.assertEqual(reflock.normalize("text<!--@a1b2c3d4-->more"), b"textmore")
 
-    # --- shell completion (ID-11) --------------------------------------------
-    def test_completion_parity_subcommands_and_flags(self):
+    # --- shell completion (ID-11, parity hardened by TEST-01) ----------------
+    @staticmethod
+    def flag_in_shell_syntax(shell, flag, script):
+        """Is `flag` present in the form this shell actually spells it?
+
+        The old parity test asked `assertIn(flag, script)`, which fish could only
+        satisfy via a `# --format` comment the test itself forced into the shipped
+        script. Asserting the real syntax is what makes the test test the artifact.
+        """
+        if shell == "fish":
+            return (f"-l {flag[2:]}" in script if flag.startswith("--")
+                    else f"-s {flag[1:]}" in script)
+        return flag in script
+
+    def test_completion_parity_uses_each_shell_own_syntax(self):
         spec = reflock.parser_spec()
         for shell in reflock.COMPLETION_SHELLS:
             script = reflock.completion_script(shell)
-            for sub, flags in spec.items():
+            for sub, info in spec.items():
                 self.assertIn(sub, script, f"{shell} script missing subcommand {sub!r}")
-                for flag in flags:
-                    if flag.startswith("--"):
-                        self.assertIn(flag, script,
-                                      f"{shell} script missing flag {flag!r} for {sub!r}")
+                for flag in info["flags"]:
+                    self.assertTrue(
+                        self.flag_in_shell_syntax(shell, flag, script),
+                        f"{shell} script missing flag {flag!r} for {sub!r}")
+
+    def test_fish_script_has_no_flag_literals_or_comment_crutches(self):
+        """The inverse assertion: a reintroduced `# --format` comment must fail."""
+        script = reflock.completion_script("fish")
+        spec = reflock.parser_spec()
+        longs = {f for info in spec.values() for f in info["flags"] if f.startswith("--")}
+        for flag in longs:
+            self.assertNotIn(flag, script,
+                             f"fish script contains the literal {flag!r}; fish spells "
+                             f"it -l {flag[2:]}, so this is a comment crutch")
+        for line in script.splitlines():
+            if line.startswith("#"):
+                continue          # the file header is prose, not a completion
+            self.assertNotIn("#", line, f"fish completion carries a comment: {line!r}")
+
+    def test_completion_positional_choices_are_offered(self):
+        for shell in reflock.COMPLETION_SHELLS:
+            script = reflock.completion_script(shell)
+            for choice in reflock.COMPLETION_SHELLS:
+                self.assertIn(choice, script,
+                              f"{shell} script does not offer {choice!r} for `completion`")
+
+    def test_completion_subcommand_does_not_offer_paths(self):
+        """`reflock completion <TAB>` took a shell name, and offered filenames."""
+        bash = reflock.completion_script("bash")
+        self.assertRegex(bash, r'completion\)\s+COMPREPLY=\(\s*\$\(compgen -W "bash fish zsh"')
+        fish = reflock.completion_script("fish")
+        comp_lines = [ln for ln in fish.splitlines()
+                      if "__fish_seen_subcommand_from completion" in ln]
+        self.assertTrue(comp_lines)
+        for ln in comp_lines:
+            self.assertNotIn("__fish_complete_path", ln,
+                             "the completion subcommand takes a shell name, not a path")
+
+    def test_zsh_declares_value_taking_options_with_choices(self):
+        script = reflock.completion_script("zsh")
+        self.assertIn("--format=[", script,
+                      "zsh must know --format takes a value, or it cannot complete it")
+        self.assertRegex(script, r"--format=\[[^\]]*\]:format:\(github human json\)")
+
+    def test_parser_spec_reports_values_and_choices(self):
+        spec = reflock.parser_spec()
+        self.assertEqual(["github", "human", "json"], spec["check"]["valued"]["--format"])
+        self.assertIn("--quiet", spec["check"]["flags"])
+        self.assertNotIn("--quiet", spec["check"]["valued"],
+                          "--quiet is a store_true, it takes no value")
+        self.assertEqual(["bash", "fish", "zsh"], spec["completion"]["positional_choices"])
+
+    def test_short_flags_are_aliases_not_separate_options(self):
+        spec = reflock.parser_spec()
+        self.assertIn(("--quiet", "-q"), spec["check"]["groups"],
+                      "-q and --quiet are one option with two spellings")
+        fish = reflock.completion_script("fish")
+        self.assertIn("-l quiet -s q", fish)
+        zsh = reflock.completion_script("zsh")
+        self.assertIn("'(--quiet -q)'{--quiet,-q}'[quiet]'", zsh)
+
+    def test_completion_fish_script_parses_under_fish(self):
+        fish = shutil.which("fish")
+        if not fish:
+            self.skipTest("fish not available")
+        import subprocess
+        proc = subprocess.run([fish, "-n", "-"], input=reflock.completion_script("fish"),
+                               text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_a_new_flag_reaches_every_script(self):
+        """ID-11's actual promise: the parser is the source of truth. Asserted
+        through each shell's real syntax, not a substring that a comment can
+        satisfy."""
+        real = reflock.build_parser
+
+        def with_extra_flag():
+            ap = real()
+            sub = next(a for a in ap._subparsers._group_actions
+                        if isinstance(a, __import__("argparse")._SubParsersAction))
+            sub.choices["check"].add_argument("--brand-new", action="store_true")
+            return ap
+        with mock.patch.object(reflock, "build_parser", with_extra_flag):
+            for shell in reflock.COMPLETION_SHELLS:
+                script = reflock.completion_script(shell)
+                self.assertTrue(
+                    self.flag_in_shell_syntax(shell, "--brand-new", script),
+                    f"{shell} script did not pick up a new parser flag")
 
     def test_completion_unsupported_shell_exits_nonzero(self):
         buf = io.StringIO()
@@ -1684,7 +1781,7 @@ class PreCommitManifestTest(unittest.TestCase):
         for hook in self.hooks:
             parts = hook["entry"].split()
             for flag in (p for p in parts[2:] if p.startswith("-")):
-                self.assertIn(flag, spec[parts[1]],
+                self.assertIn(flag, spec[parts[1]]["flags"],
                               f"hook {hook['id']} passes {flag!r}, absent from {parts[1]}")
 
     def test_no_hook_that_can_fail_runs_at_pre_commit(self):

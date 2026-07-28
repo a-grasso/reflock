@@ -1,0 +1,15 @@
+{
+  "description": "TEST-01: fish spells flags `-l format`, so the literal `--format` used to appear only in a trailing `# --format` comment that existed to satisfy assertIn in the parity test. The comment is gone; this fixture asserts both halves end to end - the real fish syntax is present and the literal is absent - so a reintroduced crutch fails here too, not only in the unit tests.",
+  "steps": [
+    {
+      "cmd": "completion",
+      "args": ["fish"],
+      "expect_exit": 0,
+      "expect_contains": [
+        "-l format -r -a \"github human json\"",
+        "-l quiet -s q"
+      ],
+      "expect_not_contains": ["--format", "--quiet", "# -"]
+    }
+  ]
+}
