@@ -830,6 +830,28 @@ def explain_entry(idx: Index, ref: Ref) -> dict:
     return entry
 
 
+UNIT_PREVIEW_LINES = 40
+
+
+def unit_preview(unit: str, full: bool) -> str:
+    """The unit text, previewed rather than dumped.
+
+    `explain` exists to say everything about *one* reference, and for an
+    unanchored one the unit is the whole file - so a pinned reference to a
+    2000-line design doc printed 2000 lines, which is exactly where a reference
+    matters most. The rule is uniform rather than whole-file-only: a 900-line
+    section is as unreadable as a 900-line file, and one branch is easier to
+    trust than two.
+    """
+    lines = unit.split("\n")
+    if full or len(lines) <= UNIT_PREVIEW_LINES:
+        return unit
+    withheld = len(lines) - UNIT_PREVIEW_LINES
+    noun = "line" if withheld == 1 else "lines"
+    return "\n".join(lines[:UNIT_PREVIEW_LINES]
+                     + [f"… {withheld} more {noun} (--full to show)"])
+
+
 def render_explain_human(entries, args) -> int:
     color = use_color(args)
     for e in entries:
@@ -853,7 +875,7 @@ def render_explain_human(entries, args) -> int:
                   "was stored) - showing the current text below.")
         if e["unit_text"] is not None:
             print()
-            print(e["unit_text"])
+            print(unit_preview(e["unit_text"], getattr(args, "full", False)))
         print()
     return 1 if any(e["verdict"] in BAD for e in entries) else 0
 
@@ -971,6 +993,9 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("spec", help="<file>:<line>")
     ex.add_argument("--format", choices=sorted(EXPLAIN_RENDERERS), default=None,
                     help="output format (default: human)")
+    ex.add_argument("--full", action="store_true",
+                    help=f"print the whole unit text, not the first "
+                         f"{UNIT_PREVIEW_LINES} lines")
     ex.set_defaults(fn=cmd_explain)
     comp = sub.add_parser("completion", help="print a shell completion script")
     comp.add_argument("shell", choices=COMPLETION_SHELLS)

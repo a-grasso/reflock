@@ -1,0 +1,21 @@
+{
+  "description": "UX-01: an unanchored reference's unit is the whole file, so explain used to print all of it - a pinned reference to a 2000-line design doc printed 2000 lines. The unit is now previewed: the first 40 lines, then one marker naming the withheld count and the flag that shows them.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "explain",
+      "args": ["a.md:1"],
+      "expect_exit": 0,
+      "expect_contains": [
+        "line 1\n",
+        "line 40\n",
+        "20 more lines (--full to show)"
+      ],
+      "expect_not_contains": ["line 60"]
+    }
+  ]
+}
