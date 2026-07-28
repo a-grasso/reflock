@@ -725,6 +725,20 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(2, rc)
         self.assertIn("nope.md", err)
 
+    def test_backlinks_format_json_unknown_path_goes_to_stdout(self):
+        self.setup_docs_tree()
+        rc, out, err = self.run_cmd("backlinks", "docs/nope.md", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
+    def test_backlinks_format_json_unknown_anchor_goes_to_stdout(self):
+        self.setup_docs_tree()
+        rc, out, err = self.run_cmd("backlinks", "docs/t.md#no-such-anchor", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("no-such-anchor", json.loads(out)["error"])
+
     def test_repo_relative_path_works_from_a_subdirectory(self):
         """check prints repo-relative paths whatever directory it runs in, so
         pasting one into explain must work from a subdirectory too."""
@@ -1339,6 +1353,78 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(reflock.GITHUB_LEVEL["UNSTAMPED"], "warning")
         self.assertNotIn("OK", reflock.GITHUB_LEVEL)
 
+    # --- BUG-07: usage errors respect --format ------------------------------
+    def render_error(self, message, fmt):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            reflock.render_error(message, fmt)
+        return out.getvalue(), err.getvalue()
+
+    def test_render_error_json_prints_object_to_stdout(self):
+        out, err = self.render_error("no such path in tree: x", "json")
+        self.assertEqual("", err)
+        self.assertEqual({"error": "no such path in tree: x"}, json.loads(out))
+
+    def test_render_error_github_prints_annotation_to_stdout(self):
+        out, err = self.render_error("no such path in tree: x", "github")
+        self.assertEqual("", err)
+        self.assertEqual("::error::no such path in tree: x\n", out)
+
+    def test_render_error_github_escapes_message(self):
+        out, _ = self.render_error("a%b\r\nc", "github")
+        self.assertEqual("::error::a%25b%0D%0Ac\n", out)
+
+    def test_render_error_human_prints_prefixed_line_to_stderr(self):
+        out, err = self.render_error("no such path in tree: x", "human")
+        self.assertEqual("", out)
+        self.assertEqual("error: no such path in tree: x\n", err)
+
+    def test_check_format_json_scope_error_goes_to_stdout(self):
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", "--format", "json", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
+    def test_check_format_github_scope_error_is_an_annotation(self):
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", "--format", "github", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertTrue(out.startswith("::error::"))
+        self.assertIn("nope.md", out)
+
+    def test_check_default_format_scope_error_is_unchanged(self):
+        """Regression guard: human format keeps printing to stderr, not stdout."""
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("check", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", out)
+        self.assertIn("nope.md", err)
+
+    def test_check_quiet_verbose_conflict_uses_render_error(self):
+        rc, out, err = self.run_cmd("check", "--quiet", "--verbose")
+        self.assertEqual(2, rc)
+        self.assertEqual("", out)
+        self.assertIn("conflicts", err)
+
+    def test_stamp_format_has_no_json_shape_scope_error_stays_on_stderr(self):
+        """stamp has no --format flag; its errors are always human/stderr."""
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("stamp", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", out)
+        self.assertIn("nope.md", err)
+
+    def test_suspects_json_scope_error_goes_to_stdout(self):
+        """suspects' pre-existing --json flag is enough for intended_format to
+        route its ScopeError to stdout too, with no new flag added."""
+        self.write("t.md", "# T\n")
+        rc, out, err = self.run_cmd("suspects", "--json", self.at("nope.md"))
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
     # --- -q/--quiet --------------------------------------------------------
     def test_quiet_clean_tree_is_silent(self):
         self.write("t.md", "# H\n\n## Real\n\nbody\n")
@@ -1768,6 +1854,32 @@ class ReflockTest(unittest.TestCase):
         self.write("a.md", "text\n")
         rc, out, err = self.run_explain("a.md:99")
         self.assertNotEqual(rc, 0)
+
+    def test_explain_format_json_bad_spec_goes_to_stdout(self):
+        rc, out, err = self.run_explain("not-a-spec", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("not-a-spec", json.loads(out)["error"])
+
+    def test_explain_format_json_unknown_file_goes_to_stdout(self):
+        rc, out, err = self.run_explain("nope.md:1", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("nope.md", json.loads(out)["error"])
+
+    def test_explain_format_json_out_of_range_line_goes_to_stdout(self):
+        self.write("a.md", "text\n")
+        rc, out, err = self.run_explain("a.md:99", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("a.md", json.loads(out)["error"])
+
+    def test_explain_format_json_no_reference_on_line_goes_to_stdout(self):
+        self.write("a.md", "no refs here\n")
+        rc, out, err = self.run_explain("a.md:1", "--format", "json")
+        self.assertEqual(2, rc)
+        self.assertEqual("", err)
+        self.assertIn("a.md", json.loads(out)["error"])
 
     def test_explain_anchor_heading_span(self):
         self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n\n## Next\n\nmore\n")
