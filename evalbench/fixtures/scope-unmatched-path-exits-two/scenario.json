@@ -1,0 +1,18 @@
+{
+  "description": "BUG-04: a path argument naming nothing in the tree is a usage error, not an empty work list. Previously `check does-not-exist.md` printed 'All references OK.' and exited 0, so a CI step pinned to a renamed path passed forever.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["does-not-exist.md"],
+      "expect_exit": 2,
+      "expect_stdout_empty": true,
+      "expect_stderr": ["no such path in tree", "does-not-exist.md"]
+    },
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": ["DANGLING"]
+    }
+  ]
+}

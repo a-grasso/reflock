@@ -63,24 +63,10 @@ than by priority tier.
 9. ~~**Colorized terminal output.**~~ Implemented: `check`'s verdict labels
    are colored by severity, honoring `NO_COLOR`, `--no-color`, and non-tty
    auto-detection.
-10. **`reflock explain <file>:<line>`.** One command that prints everything
-    about a single reference — resolved target, anchor, current vs. pinned
-    fingerprint, the actual unit text on both sides — instead of making
-    someone reconstruct that by hand from a `check` line and a manual diff.
-11. **Shell completion.** `argparse` can generate bash/zsh/fish completions
-    almost for free; near-zero cost, standard expectation for any CLI a
-    developer runs daily.
 12. **A config file (`reflock.toml` / `.reflock.yml`).** `--root`, ignore
     patterns, default output format, and future per-path pin policy currently
     have to be repeated as flags in every hook and every CI step. One file,
     read once, checked in next to `.reflockignore`.
-13. **A quiet/errors-only mode with a one-line summary.** `check --silent` (or
-    `-q`) suppresses the per-reference `OK` noise and prints just a summary —
-    `1 of 137 references failed` — to stderr on failure. Useful for a CI log
-    that only wants to hear from reflock when something's actually wrong,
-    matching the quiet-by-default posture of `black --check`/`terraform fmt
-    -check`.
-
 ## Effectiveness — catching more real drift
 
 14. **Fuzzy/percentage drift instead of only exact-hash mismatch.** Today
@@ -90,11 +76,6 @@ than by priority tier.
     similarity score (e.g. token-level diff ratio) surfaced in `--verbose`
     output would help a reviewer triage a long `DRIFTED` list by how much
     actually changed.
-15. **`reflock backlinks <path>`.** "What points at this file" is the
-    Obsidian instinct the README already names as prior art, but it's never
-    surfaced as its own command — today you'd have to grep the whole index
-    yourself. Directly useful before editing a heavily-cited file: "what
-    would I invalidate?"
 16. **Detect verbatim-pasted excerpts, not just links.** The README's own
     caveat says "prefer eliminating the reference — if B can transclude
     A, there's nothing to keep in sync." A checker that flags an
@@ -126,12 +107,6 @@ than by priority tier.
     `a-grasso/reflock-action@v1` as a real composite/Docker action turns
     adoption into one line in a workflow instead of "read the README and
     hand-write the steps" — matches how every other linter ships today.
-21. **A `pre-commit` framework manifest (`.pre-commit-hooks.yaml`).** Most
-    teams already run `black`/`ruff`/`mypy` through the `pre-commit` tool's
-    `repos:` list, not hand-rolled `.git/hooks/pre-commit` scripts. Shipping
-    the manifest lets reflock slot into that existing convention instead of
-    asking every adopter to reinvent the hook-install step the README
-    currently documents manually.
 22. **A minimal VS Code extension ahead of full LSP.** Run
     `reflock check --json` on save, render results via VS Code's Diagnostics
     API. Much smaller than the full LSP in NORTHSTARS ([#9](NORTHSTARS.md))

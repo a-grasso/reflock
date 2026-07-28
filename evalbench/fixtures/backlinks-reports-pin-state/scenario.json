@@ -1,0 +1,16 @@
+{
+  "description": "a pinned and an unpinned reference to the same target are distinguished",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "backlinks",
+      "args": ["t.md"],
+      "expect_contains": ["a.md:1", "pinned", "b.md:1", "unpinned"],
+      "expect_exit": 0
+    }
+  ]
+}

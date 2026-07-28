@@ -1,0 +1,17 @@
+{
+  "description": "UX-01: --full is the escape hatch, and it is discoverable from the marker itself rather than only from the README. The whole unit prints, with no marker.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "explain",
+      "args": ["a.md:1", "--full"],
+      "expect_exit": 0,
+      "expect_contains": ["line 1\n", "line 40\n", "line 60"],
+      "expect_not_contains": ["more lines"]
+    }
+  ]
+}

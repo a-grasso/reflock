@@ -27,6 +27,20 @@ jobs:
         id: v
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      # The tag is the only source of the published version, so without this a
+      # tag could ship a formula whose `reflock --version` disagrees with the
+      # release it came from, and nothing would fail. Runs before anything is
+      # published or pushed to the tap.
+      - name: Refuse a tag that disagrees with __version__
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          src_version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' reflock.py)"
+          if [ "$tag_version" != "$src_version" ]; then
+            echo "tag $GITHUB_REF_NAME says $tag_version, reflock.py says $src_version" >&2
+            exit 1
+          fi
+          echo "tag and __version__ agree on $src_version"
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,23 @@
+{
+  "description": "TEST-01: `reflock completion <TAB>` takes a shell name, and offered file paths - parser_spec walked option_strings only, so a positional's choices were dropped. All three scripts now offer bash/fish/zsh for it.",
+  "steps": [
+    {
+      "cmd": "completion",
+      "args": ["bash"],
+      "expect_exit": 0,
+      "expect_contains": ["completion) COMPREPLY=( $(compgen -W \"bash fish zsh\""]
+    },
+    {
+      "cmd": "completion",
+      "args": ["zsh"],
+      "expect_exit": 0,
+      "expect_contains": ["completion) _arguments '1:completion:(bash fish zsh)'"]
+    },
+    {
+      "cmd": "completion",
+      "args": ["fish"],
+      "expect_exit": 0,
+      "expect_contains": ["__fish_seen_subcommand_from completion\" -a \"bash fish zsh\""]
+    }
+  ]
+}

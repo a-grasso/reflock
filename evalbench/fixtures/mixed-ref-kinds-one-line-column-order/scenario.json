@@ -1,0 +1,39 @@
+{
+  "description": "NIT-01: parse_refs applied its patterns in sequence and appended each pattern's matches, so a line carrying several *kinds* of reference came out grouped by kind rather than left to right. Invisible for a single-kind line, since finditer is already left-to-right. check reported pattern order while explain sorted by column, so the two could list one line's references differently - now parse_refs owns the order and both inherit it.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--verbose", "--json"],
+      "expect_exit": 0,
+      "expect_json": [
+        {
+          "verdict": "OK",
+          "file": "a.md",
+          "line": 1,
+          "target": "wiki",
+          "detail": "unpinned"
+        },
+        {
+          "verdict": "OK",
+          "file": "a.md",
+          "line": 1,
+          "target": "t.md",
+          "detail": "unpinned"
+        },
+        {
+          "verdict": "OK",
+          "file": "a.md",
+          "line": 1,
+          "target": "t.md",
+          "detail": "unpinned"
+        }
+      ]
+    },
+    {
+      "cmd": "explain",
+      "args": ["a.md:1"],
+      "expect_exit": 0,
+      "expect_contains": ["resolves to wiki.md", "resolves to t.md"]
+    }
+  ]
+}

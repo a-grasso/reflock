@@ -78,7 +78,45 @@ The pipeline runs four stages — see [ADR-0011](../adr/0011-….md#decision).
 ```
 
 Then `reflock check` resolves every one and reports `DANGLING` on any miss.
-`reflock suspects` helps you *find* the prose that should have been links.
+`reflock suspects` helps you *find* the prose that should have been links. It
+skips fenced blocks and inline code spans on the same basis references do — a
+path in backticks is usually prose *about* a path, and false positives are what
+destroy trust in a gate. In a non-markdown file (`--all`) backticks aren't code
+spans, so lines there are scanned as-is.
+
+Markdown's reference-style form is also understood - `[the loader][loader-ref]`
+with a `[loader-ref]: doc/adr/0013.md#loader` definition elsewhere in the file:
+
+```markdown
+The tokenizer feeds [the loader][loader-ref] directly.
+
+[loader-ref]: doc/adr/0013.md#loader
+```
+
+A definition names its target exactly once even when many usages point at it,
+so the pin lives on the **definition** line, not on any usage - `reflock stamp`
+never touches a usage line. The collapsed form (`[loader-ref][]`) resolves the
+same way. The shortcut form - a lone `[loader-ref]` with no second bracket
+pair - is **not** supported: it is indistinguishable from ordinary bracketed
+prose.
+
+Wiki-links are understood too - `[[loader]]`, `[[loader#anchor]]`,
+`[[loader|display text]]`:
+
+```markdown
+See [[loader]] and [[0013-prompts-as-resources#loader|the loader]].
+```
+
+An alias after `|` is display text only; a target containing a `|` splits at
+the **first** one. Resolution tries two things, in order: first as a path
+relative to the referring file (`.md` appended when the target has no
+extension), then - if that fails - by unique basename across the whole tree.
+The second step is what makes `[[loader]]` work from anywhere in an Obsidian-
+style vault without a relative path, matching how Obsidian resolves note
+names. If more than one file shares that basename, the link is `DANGLING`
+with every candidate listed, not silently resolved to one of them - **this is
+not full Obsidian fidelity**: there is no alias-index, no folder-priority
+config, and no fuzzy matching, just relative-then-unique-basename.
 
 ### Level 2 — pin load-bearing references with a fingerprint
 
@@ -157,12 +195,88 @@ Then, from any repo:
 reflock check          # report problems (exit 1 if any)
 reflock stamp          # fill empty pins
 reflock stamp --rebless doc/DESIGN.md   # accept current target state for these refs
+reflock stamp --check   # report what stamp would do, write nothing (exit 1 if not a no-op)
 reflock suspects --all # bare path-shaped tokens that resolve to nothing
+reflock backlinks doc/DESIGN.md   # what points at this file, before you edit it
+reflock explain doc/DESIGN.md:42  # everything about one reference
 ```
+
+`stamp` is a surgical write: it changes the 8 hex characters of a pin and
+nothing else. Line endings are preserved exactly as the file had them, `\r\n`
+and mixed files included, and a file with no trailing newline does not gain one
+— so stamping one pin never produces a whole-file diff. It does not follow
+symlinks: a symlinked file is not scanned for references, because writing
+through the link would modify a file outside the tree with nothing to show for
+it in `git status`. A reference *pointing at* a symlink resolves and
+fingerprints normally, since that direction is only a read.
 
 `check` colors verdict labels by severity when stdout is a terminal; pass
 `--no-color` or set `NO_COLOR` (https://no-color.org) to turn that off, or pipe
 output anywhere and it's plain text automatically.
+
+`check --format <human|json|github>` selects the output format; `human` is the
+default. `--json` is a retained alias for `--format json`. Passing both is
+fine as long as they agree; passing `--json` with a conflicting `--format`
+exits nonzero with an error naming both flags. `github` emits GitHub Actions
+inline annotations - see [Three gates, three trust boundaries](#three-gates-three-trust-boundaries)
+below for the CI usage.
+
+`check -q` / `check --quiet` prints nothing on success; on failure it prints
+one summary line - `reflock: 1 of 137 references failed` - to **stderr** and
+exits nonzero, for a CI log that only wants to hear from reflock when
+something's wrong. With `--format json`, `-q` leaves the findings array on
+stdout untouched and just suppresses the human summary line. `-q --verbose`
+is contradictory and exits nonzero naming both flags.
+
+`reflock completion {bash,zsh,fish}` prints a static completion script for the
+named shell to stdout - it writes nothing and installs nothing itself:
+
+```bash
+reflock completion bash > /etc/bash_completion.d/reflock
+reflock completion zsh  > ~/.zsh/completions/_reflock   # keep the directory on fpath
+reflock completion fish > ~/.config/fish/completions/reflock.fish
+```
+
+`reflock backlinks <path>` answers "what points at this file" - the question
+you want answered before editing a heavily-cited document, so you know what
+you'd invalidate. `<path>` accepts an anchor (`doc/DESIGN.md#section`) to
+narrow to references targeting that anchor specifically. Each line is the
+referring file and line, the target as written, and its pin state
+(`unpinned`, `unstamped`, or `pinned`) - pin state matters because an
+unpinned reference won't notice your edit. A path with no backlinks prints a
+clear "no backlinks" line and exits 0; a path absent from the index exits
+nonzero, since silently reporting zero backlinks for a typo'd filename would
+mislead. An `#anchor` that resolves to neither a heading nor a
+`reflock-anchor:` span exits nonzero for the same reason — "nothing points at
+this section" is precisely the answer you act on before rewriting that section,
+so a typo must not be able to produce it. `backlinks` and `explain` both accept
+any spelling of a path that names an indexed file: cwd-relative, `./`-prefixed,
+absolute, or the repo-relative form `check` prints, so you can paste a
+`file:line` straight out of a `check` report from any directory. It's read-only and supports `--format <human|json>` per the same
+renderer `check` uses; the JSON shape is a list of
+`{"file", "line", "target", "pin"}` objects.
+
+`reflock explain <file>:<line>` prints everything about the reference(s) on
+that line - resolved target, matched anchor and its line span, pin, current
+fingerprint, verdict, and the actual unit text that was fingerprinted -
+instead of making you reconstruct that by hand from a `check` line and a
+manual diff. A line with more than one reference reports all of them, in
+column order; a line with none exits nonzero. It's read-only and reuses the
+same `classify` logic `check` uses, so the verdict it reports can never
+disagree with `check`. When a reference is `DRIFTED`, only the *pinned
+text's hash* was ever stored (see the fingerprinting decision above) -
+`explain` shows the current text and both hashes, and says plainly that the
+prior text is not recoverable; it does not shell out to git history to
+reconstruct it. Supports `--format <human|json>` per the same renderer
+pattern.
+
+The unit text is a **preview**: up to 40 lines, then one line saying how many
+were withheld. For an unanchored reference the unit is the whole file, so
+without that a pinned reference to a 2000-line document printed 2000 lines —
+unreadable exactly where a reference matters most, since a heavily-pinned
+authority file is usually a long one. Pass `--full` for all of it. The rule is
+the same for anchored units: a 900-line section is no more readable than a
+900-line file.
 
 There is deliberately no vendoring path. One machine, one installed copy, used
 by every repo — a per-repo checked-in copy is exactly the kind of duplicate
@@ -190,8 +304,97 @@ reasonable. Gate at pre-push instead if that friction outweighs catching
 mistakes early - see
 [what each gate can honestly promise](DECISIONS.md#3-where-to-gate-and-what-each-gate-can-honestly-promise)<!--@c770f4c8-->.
 
+If you'd rather keep pre-commit advisory and enforce at pre-push, use
+`stamp --check` there instead of `check`: it computes exactly the edits
+`stamp` would make - a pin that's opted in but unstamped, or one whose hash
+would be rewritten - reports them, and writes nothing. Exit 0 means `stamp`
+would be a no-op.
+```bash
+reflock stamp --check || echo "Some pins are stale; run 'reflock stamp'."
+```
+
+Add `--warn` and it reports exactly the same thing but always exits 0, for a
+hook or CI step that should inform without blocking. That's the difference
+between the two flags: `--check` answers "would this change anything" with its
+exit code, `--check --warn` answers it only in words.
+```bash
+reflock stamp --check --warn    # same report, never nonzero
+```
+
+If your team already runs the [`pre-commit`](https://pre-commit.com) framework,
+reflock ships a `.pre-commit-hooks.yaml`, so you don't hand-roll either script:
+
+```yaml
+repos:
+  - repo: https://github.com/a-grasso/reflock
+    rev: v0.1.5
+    hooks:
+      - id: reflock-check
+      - id: reflock-stamp-check
+```
+
+The two hooks land on different stages, which is the same advisory/enforcing
+split as above:
+
+| Hook | Runs | Stage | Can it stop you? |
+|---|---|---|---|
+| `reflock-stamp-check` | `stamp --check --warn` | `pre-commit` | never — always exits 0 |
+| `reflock-check` | `check` | `pre-push` | yes |
+
+Install both stages once:
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type pre-push
+```
+
+`reflock-stamp-check` can run at commit time *because* it cannot fail. That
+matters: `pre-commit` has no warn-only mode — a failing hook blocks whatever
+stage it runs in — so an advisory hook has to be advisory in the command it
+invokes, which is what `--warn` is for. You get told about pins that need
+stamping on every commit and are never blocked by one, since a reference whose
+target lands in the *next* commit is correctly `DANGLING` and blocking that is
+friction you're right to resent.
+
+`reflock-check` enforces at push: a broken reference doesn't leave your machine.
+If you'd rather enforce at commit time and accept the friction, override it:
+
+```yaml
+      - id: reflock-check
+        stages: [pre-commit]
+```
+
+Both run over the whole tree, not the changed files: a per-file invocation
+can't see cross-file targets and would report references as `DANGLING` purely
+because the file defining the target wasn't passed in.
+
 **2. CI (the server backstop).** One job step: `reflock check`. Nonzero exit fails
 the build. Deterministic, cacheable, no secrets.
+
+Three exit codes, and the distinction between the last two is the one CI cares
+about:
+
+| Code | Means |
+|---|---|
+| 0 | every reference checked out clean |
+| 1 | reflock ran and found problems |
+| 2 | reflock could not run as asked — bad flag combination, or a path argument naming nothing in the tree |
+
+A path argument that matches nothing is code 2, not 0. Scoping a job to
+`reflock check docs/` used to keep passing the day `docs/` was renamed, which is
+the exact failure reflock exists to prevent — so a stale invocation now fails
+loudly instead of reporting a clean tree it never looked at. `reflock check .`
+means the whole tree, as it reads.
+
+On GitHub Actions, `check --format github` emits
+[workflow commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions)
+instead of the human report, so each finding lands as an inline annotation on
+its exact line of the PR diff rather than a log block someone has to open:
+```yaml
+- run: reflock check --format github
+```
+`DANGLING` and `DRIFTED` findings emit `::error`; `UNSTAMPED` emits `::warning`.
+A clean tree prints nothing on stdout. Exit codes are unchanged from the
+default format.
 
 **3. The Stop hook (the agent).** The one people forget. When an AI coding agent
 (e.g. Claude Code) edits your docs, it can *declare itself done* with references

@@ -1,0 +1,11 @@
+{
+  "description": "a DANGLING reference explains why it failed to resolve",
+  "steps": [
+    {
+      "cmd": "explain",
+      "args": ["a.md:1"],
+      "expect_exit": 1,
+      "expect_contains": ["verdict     DANGLING", "no such file: missing.md"]
+    }
+  ]
+}

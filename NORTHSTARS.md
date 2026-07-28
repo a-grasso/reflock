@@ -62,85 +62,6 @@ actually occurs.
 
 ---
 
-## 2. Markdown link forms beyond `[text](target)` *(Near)*
-
-**The scenario:** two forms show up constantly in real docs and neither is
-seen at all today:
-
-- **Reference-style links** - `[the loader][loader-ref]` with a
-  `[loader-ref]: doc/adr/0013.md#loader` definition elsewhere in the file.
-  Writers use this style specifically in heavily-cross-referenced docs (ADRs,
-  specs) to keep prose readable - precisely reflock's target audience.
-- **Wiki-links** - `[[loader]]` or `[[0013-prompts-as-resources#loader|the
-  loader]]`, the Obsidian/Foam/Logseq convention. reflock's own README already
-  cites Obsidian backlinks as prior art; teams that keep engineering notes in
-  an Obsidian vault next to (or inside) a code repo will write these by
-  reflex.
-
-**Why reflock can't do this today:** `MD_REF` only matches the inline
-`[text](url)` form. A reference-style link or a wiki-link isn't parsed at
-all - not `DANGLING`, not anything. It's invisible, the same failure mode as
-#1: looks clean, isn't checked.
-
-**Shape of a solution:** two more regexes (or one grammar table) alongside
-`MD_REF`: a link-definition line (`^\[id\]:\s+(\S+)`) resolved against its
-inline usages, and a wiki-link pattern with `#anchor` and `|alias` handled the
-same way `[text](target)` already is. Both plug into the existing
-`Ref`/`classify` pipeline unchanged - this is grammar surface area, not a
-design change.
-
----
-
-## 3. `stamp --check`: verify without mutating *(Near)*
-
-**The scenario:** a CI job wants to fail if any reference *should* be
-stamped but isn't up to date - the same "would this formatter change
-anything" check `prettier --check`, `terraform fmt -check`, and `black --check`
-already offer - without actually writing files in CI (which either requires
-a follow-up commit-back step, or gets silently discarded, either way not
-what you want in a gate).
-
-**Why reflock can't do this today:** `stamp` always writes. The only
-workaround is running it and then `git diff --exit-code`, which works but
-means every CI config reimplements the same two-line dance instead of
-reflock providing it directly, and it produces confusing diffs in CI logs
-mixed with the job's own output.
-
-**Shape of a solution:** `reflock stamp --check` computes the same edits
-`stamp` would make, reports what's unstamped/stale (reusing the `check`
-verdict machinery - an `UNSTAMPED` or a would-be `DRIFTED`-if-rebless-ran is
-already the right signal), and exits nonzero without touching disk. Small,
-mechanical, and closes a real CI ergonomics gap the "Three gates" section of
-the README already promises but doesn't fully deliver.
-
----
-
-## 4. CI-native output: inline annotations, not just a log block *(Near)*
-
-**The scenario:** a reviewer wants a `DANGLING` or `DRIFTED` finding to show
-up as an inline comment on the exact changed line in a GitHub PR diff - the
-way ESLint, mypy, and most linters already integrate with GitHub Actions -
-instead of a flat report buried in a build log that nobody opens unless the
-job is already red.
-
-**Why reflock can't do this today:** `check --json` is a fine machine format,
-but nothing translates it into the annotation formats CI systems actually
-render inline (`::error file=...,line=...::message` for GitHub Actions,
-SARIF for GitHub's code-scanning tab, similar conventions for GitLab).
-Every adopter has to write that translation layer themselves.
-
-**Shape of a solution:** `reflock check --format=github` (or `--format=sarif`)
-alongside the existing plain/`--json` output - a formatting concern only,
-the verdict computation doesn't change at all.
-
-**Worth knowing:** this is a place where inline pins (DECISIONS.md #1) give
-reflock something a lockfile-based tool can't easily match - a finding already
-carries the exact file and line of the *reference*, which is what an inline PR
-annotation needs. [drift](DECISIONS.md#prior-art-under-observation)'s GitHub
-Action is install-only and emits no annotations.
-
----
-
 ## 5. Symbol-level code anchors without hand-placed markers *(Medium)*
 
 **The scenario:** `// REF: src/auth/session.py#validate_token` should resolve
@@ -432,11 +353,11 @@ scale, tree-sitter, or LSP. A stopgap, not the answer.
 
 ### Concrete sequencing
 
-1. **Stay in Python and finish the near work.** #2 (link grammars), #3
-   (`stamp --check`), #4 (CI-native output) are grammar and formatting changes
-   with zero language leverage - Python is the cheapest possible host for them,
-   and they are what settles the semantics. Porting before the semantics settle
-   means porting twice.
+1. **Stay in Python and finish the near work.** #2 (link grammars), #4
+   (CI-native output) are grammar and formatting changes with zero language
+   leverage - Python is the cheapest possible host for them, and they are what
+   settles the semantics. Porting before the semantics settle means porting
+   twice.
 2. **Separately, kill the subprocess wall time.** One git invocation instead of
    two, or walk the tree directly. No rewrite required.
 3. **Freeze the wire format before any port.** `normalize()` plus truncated

@@ -1,0 +1,13 @@
+{
+  "description": "check -q with one DANGLING finding: the one-line summary goes to stderr and stdout stays exactly empty, nonzero exit.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["-q"],
+      "expect_exit": 1,
+      "expect_stdout_empty": true,
+      "expect_stderr": ["reflock: 1 of 1 references failed"],
+      "expect_stderr_not_contains": ["DANGLING", "problem(s)"]
+    }
+  ]
+}

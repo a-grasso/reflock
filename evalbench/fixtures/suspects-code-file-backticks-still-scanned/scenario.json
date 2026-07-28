@@ -1,0 +1,17 @@
+{
+  "description": "BUG-06 boundary: the exemption is markdown-only, exactly as in parse_refs. A backtick in a .py file is not code-span syntax, and treating it as one would blind the heuristic inside ordinary string literals and comments.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--all", "--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "file": "m.py",
+          "line": 1,
+          "target": "build/legacy/out.json"
+        }
+      ]
+    }
+  ]
+}

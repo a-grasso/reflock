@@ -1,0 +1,11 @@
+{
+  "description": "an uncited file exits 0 with a clear no-backlinks message",
+  "steps": [
+    {
+      "cmd": "backlinks",
+      "args": ["t.md"],
+      "expect_contains": ["No backlinks"],
+      "expect_exit": 0
+    }
+  ]
+}

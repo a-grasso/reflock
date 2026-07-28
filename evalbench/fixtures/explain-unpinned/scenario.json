@@ -1,0 +1,12 @@
+{
+  "description": "an unpinned reference is reported as such, with no hash comparison",
+  "steps": [
+    {
+      "cmd": "explain",
+      "args": ["a.md:1"],
+      "expect_exit": 0,
+      "expect_contains": ["verdict     OK", "pin         unpinned"],
+      "expect_not_contains": ["current     "]
+    }
+  ]
+}

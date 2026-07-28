@@ -1,6 +1,6 @@
 # NS-04 acceptance contract: `--format github`
 
-Source: [northstar #4](../NORTHSTARS.md#4-ci-native-output-inline-annotations-not-just-a-log-block-near)
+Source: northstar #4 (implemented; the source entry is deleted from NORTHSTARS.md per this contract's definition of done)
 Owner: agent · Tier: near · Touches: [reflock.py](../reflock.py)
 Locked decisions: [D1](DECIDED.md#d1-one-reporting-layer-selected-by---format), [D3](DECIDED.md#d3-zero-runtime-dependencies)
 Depends on: FMT-01, ID-13
