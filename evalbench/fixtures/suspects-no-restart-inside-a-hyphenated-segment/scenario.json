@@ -1,0 +1,13 @@
+{
+  "description": "BUG-13: the lookbehind blocks a match at `dist-share/...` because a `/` precedes it, but `-` was not in the class, so the pattern restarted inside the segment and reported `share/index.html` - a suffix of a path fragment. Same defect as BUG-08 with a different character; the rule missed there is that no match may begin at a character the segment class would have consumed. A hyphenated path in ordinary use is still reported whole.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--all", "--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"file": "Justfile", "line": 3, "target": "doc/my-notes.md"}
+      ]
+    }
+  ]
+}

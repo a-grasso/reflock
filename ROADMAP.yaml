@@ -558,6 +558,22 @@ items:
       style tail resolution. The recipe-working-directory case stays out of
       reach by design and is documented as such.
 
+  - id: BUG-13
+    title: a hyphen re-opens a match mid-path
+    source: kai-crm dogfooding 2026-07-30
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/BUG-13-suspects-hyphen-restart.md
+    blocked_by: []
+    touches: [reflock_lib/grammar.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Found verifying BUG-08..12 on the repo that produced them:
+      `{{ dir }}/dist-share/index.html` reported `share/index.html`. BUG-08's
+      defect with a different character - the rule it missed is that no match
+      may begin at a character the segment class would have consumed. Now
+      stated as a rule in the pattern, with a per-character test.
+
   # --- human-owned: design decisions ----------------------------------------
   # Listed so the orchestrator can see them and skip them, not to schedule them.
   - id: NS-01
