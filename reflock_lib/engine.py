@@ -106,6 +106,50 @@ def is_unauthored_source(rel: str) -> bool:
                for p in UNAUTHORED_SOURCES)
 
 
+def strip_dot_segments(tok: str) -> str:
+    """A token's root-relative reading: leading `./` and `../` segments dropped.
+
+    For the `suspects` gitignore pass (BUG-12). `../data/crm.db` in a source six
+    directories deep resolves, relative to the file, to a path gitignored
+    nowhere; the path the author meant is `data/crm.db` from the root, because
+    the base is a process working directory reflock cannot know. This is not a
+    guess about which base is right - it adds a candidate, and a candidate can
+    only ever suppress a finding, never create one.
+
+    Doubles as the guarantee that no `..`-prefixed path reaches
+    `git check-ignore`, which has no meaningful answer for one.
+    """
+    parts = tok.split("/")
+    i = 0
+    while i < len(parts) and parts[i] in (".", ".."):
+        i += 1
+    return "/".join(parts[i:])
+
+
+def path_tails(idx: Index) -> set[str]:
+    """Every segment-boundary suffix, of two or more segments, of every indexed
+    path - files and directories.
+
+    A token matching one of these resolves somewhere in the tree, just not from
+    the base `suspects` guessed, so calling it rot is a claim reflock cannot
+    support (BUG-12). D4 is the precedent: wiki-links already fall back from
+    relative resolution to a match across the index. D4 requires *uniqueness*
+    because it must pick one target to fingerprint; `suspects` picks nothing and
+    fingerprints nothing, so uniqueness would only re-introduce false positives
+    here.
+
+    Single-segment suffixes are excluded: PATHISH requires a slash, so a bare
+    basename is never a token, and leaving them out keeps the leniency from
+    widening past what the pattern can produce.
+    """
+    tails = set()
+    for p in idx.files | idx.dirs:
+        parts = p.split("/")
+        for i in range(len(parts) - 1):
+            tails.add("/".join(parts[i:]))
+    return tails
+
+
 def is_text(path: str) -> bool:
     try:
         with open(path, "rb") as fh:

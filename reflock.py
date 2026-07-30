@@ -81,6 +81,7 @@ from reflock_lib.engine import (
     mask_urls,
     normalize,
     parse_refs,
+    path_tails,
     read_reflockignore,
     repo_root,
     resolve_path,
@@ -88,6 +89,7 @@ from reflock_lib.engine import (
     resolve_wikilink,
     run,
     slugify,
+    strip_dot_segments,
     unit_fingerprint,
     unit_text,
 )
