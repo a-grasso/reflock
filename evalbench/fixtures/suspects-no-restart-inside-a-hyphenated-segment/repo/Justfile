@@ -1,0 +1,3 @@
+build:
+	out="{{ dir }}/dist-share/index.html"
+	# real: doc/my-notes.md

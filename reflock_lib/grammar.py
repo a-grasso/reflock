@@ -37,6 +37,15 @@ ANCHOR_OPEN = re.compile(r"reflock-anchor:\s*(?P<name>[\w.\-/]+)")
 ANCHOR_END = re.compile(r"reflock-anchor-end:\s*(?P<name>[\w.\-/]+)")
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*\s*$")
 # A path-shaped token for the `suspects` heuristic: has a slash and an extension.
+#
+# The lookbehind's rule (BUG-08, BUG-13): no match may begin at a character the
+# segment class `[\w.\-]` would itself have consumed, plus `/` and `$`.
+# Otherwise the pattern restarts *inside* a token and reports a suffix of it -
+# `@babel/core/...` out of an npm URL, `share/index.html` out of
+# `{{ dir }}/dist-share/index.html`. Both arrived as one-off omissions of that
+# rule, so it is written here as a rule; extend the class, never the incident
+# list, if the segment class ever grows.
+#
 # Two shapes are deliberately not path-shaped (BUG-09):
 #   `$` in the lookbehind - `$scriptDir/a/b.c` is a shell/Make/CI variable, and
 #     its first segment is a runtime value, not a directory. (`${VAR}/a/b.c` and
@@ -55,7 +64,7 @@ HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*\s*$")
 # like. Extensions past it are a bounded blind spot, which is the failure mode
 # an advisory heuristic is allowed to have; reporting a token wrong is not.
 PATHISH = re.compile(
-    r"(?<![\w./$])(?P<p>(?:\.\.?/)?(?:(?!\.\.\./)[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,9})(?!\w)"
+    r"(?<![\w./$-])(?P<p>(?:\.\.?/)?(?:(?!\.\.\./)[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,9})(?!\w)"
 )
 EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|//|#)")  # url scheme, //, or same-page #
 # A URL, for masking before the `suspects` scan: a URL's path segments are not

@@ -846,6 +846,36 @@ class ReflockTest(unittest.TestCase):
         self.write("a.md", "The twin of platform/research.sh does the same.\n")
         self.assertEqual(["platform/research.sh"], self.suspects_hits())
 
+    # --- BUG-13: no match may begin mid-token --------------------------------
+    def test_suspects_does_not_restart_inside_a_hyphenated_segment(self):
+        """`{{ dir }}/dist-share/index.html` reported `share/index.html` - a
+        suffix of a path fragment, not a path anyone wrote."""
+        self.write("Justfile", 'out="{{ dir }}/dist-share/index.html"\n')
+        self.assertEqual([], self.suspects_hits("--all"))
+
+    def test_suspects_reports_a_hyphenated_path_whole(self):
+        self.write("a.md", "See doc/my-file.md for the long form.\n")
+        self.assertEqual(["doc/my-file.md"], self.suspects_hits())
+
+    def test_suspects_reports_a_path_after_a_markdown_bullet(self):
+        self.write("a.md", "- doc/gone.md\n")
+        self.assertEqual(["doc/gone.md"], self.suspects_hits())
+
+    def test_pathish_never_starts_at_a_segment_character(self):
+        """The rule, tested as a rule: the lookbehind exists to stop a match
+        starting mid-token, so it must exclude every character the segment class
+        admits. `@` (BUG-08) and `-` (BUG-13) each slipped through as one-off
+        omissions of it."""
+        for ch in "abzABZ09_.-/$":
+            with self.subTest(ch):
+                # The `{}/` prefix is what puts the character mid-token: it
+                # blocks a match starting at `pre`, exactly as the interpolation
+                # in `{{ dir }}/dist-share/index.html` did.
+                line = "{}/pre" + ch + "seg/x.md"
+                found = [m.group("p") for m in reflock.PATHISH.finditer(line)]
+                self.assertNotIn("seg/x.md", found,
+                                 f"{ch!r} allowed a mid-token restart")
+
     # --- UX-01: the unit text is a preview, not a dump ----------------------
     def long_target(self, n, anchor=False):
         head = "# T\n\n## Sec\n\n" if anchor else ""
