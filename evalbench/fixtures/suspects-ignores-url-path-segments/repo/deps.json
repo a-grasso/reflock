@@ -1,0 +1,9 @@
+{
+  "name": "showcase",
+  "packages": {
+    "node_modules/@babel/core": {
+      "resolved": "https://registry.npmjs.org/@babel/core/-/core-7.29.7.tgz"
+    }
+  },
+  "comment": "the generator lives at build/snapshot.py"
+}

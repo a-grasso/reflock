@@ -655,6 +655,39 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(["build/legacy/out.json"], self.suspects_hits("--all"),
                           "backticks are not code-span syntax in a .py file")
 
+    # --- BUG-08: a URL is not a path ----------------------------------------
+    SCOPED_URL = "https://registry.npmjs.org/@babel/core/-/core-7.29.7.tgz"
+
+    def test_suspects_ignores_scoped_registry_url(self):
+        """An `@` is outside PATHISH's lookbehind class, so an npm scope used to
+        re-open a match mid-URL. Three-quarters of one repo's findings."""
+        self.write("p.json", f'  "resolved": "{self.SCOPED_URL}"\n')
+        self.assertEqual([], self.suspects_hits("--all"))
+
+    def test_suspects_ignores_plain_url_path_segments(self):
+        self.write("a.md", "See https://example.com/docs/a/b/page.html for more.\n")
+        self.assertEqual([], self.suspects_hits())
+
+    def test_suspects_ignores_protocol_relative_url(self):
+        self.write("a.md", "Fetched from //cdn.example.com/lib/thing.json at boot.\n")
+        self.assertEqual([], self.suspects_hits())
+
+    def test_suspects_catches_path_after_url_on_same_line(self):
+        """Masking must not silence the rest of the line - the BUG-02 lesson."""
+        self.write("a.md", f"From {self.SCOPED_URL} into docs/gone.md today.\n")
+        self.assertEqual(["docs/gone.md"], self.suspects_hits())
+
+    def test_suspects_ignores_url_in_markdown_link_destination(self):
+        self.write("a.md", "See [the tarball](%s).\n" % self.SCOPED_URL)
+        self.assertEqual([], self.suspects_hits())
+
+    def test_mask_urls_blanks_same_length(self):
+        line = f"From {self.SCOPED_URL} into docs/gone.md today."
+        masked = reflock.mask_urls(line)
+        self.assertEqual(len(line), len(masked))
+        self.assertNotIn("babel", masked)
+        self.assertIn("docs/gone.md", masked)
+
     # --- UX-01: the unit text is a preview, not a dump ----------------------
     def long_target(self, n, anchor=False):
         head = "# T\n\n## Sec\n\n" if anchor else ""

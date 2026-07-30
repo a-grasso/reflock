@@ -1,0 +1,20 @@
+{
+  "description": "BUG-08: PATHISH excluded URLs only by accident of its lookbehind - every candidate start inside a plain URL is preceded by '/' or '.'. An '@' is not in that class, so an npm scope re-opened a match mid-URL and reported 'babel/core/-/core-7.29.7.tgz' as a bare path. URLs are now masked out of the line before scanning, the same way inline code spans are, so the genuine bare path later in the same file is still reported. The fixture deliberately uses deps.json rather than package-lock.json, because BUG-11 skips lockfiles by name and this fixture must keep exercising the URL mask itself.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": [
+        "--all",
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "file": "deps.json",
+          "line": 8,
+          "target": "build/snapshot.py"
+        }
+      ]
+    }
+  ]
+}

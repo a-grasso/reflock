@@ -20,6 +20,7 @@ from reflock_lib.grammar import (
     MD_REF,
     PIN_STRIP,
     REF_DEF,
+    URL,
     WIKI_LINK,
     FP_LEN,
     Index,
@@ -194,6 +195,17 @@ def mask_code_spans(line: str) -> str:
         out.append(line[i])
         i += 1
     return "".join(out)
+
+
+def mask_urls(line: str) -> str:
+    """Blank out URLs, same-length, so offsets are unaffected and nothing later
+    in the line is silenced - the same contract as mask_code_spans.
+
+    For `suspects` only: a URL's path segments are not repo paths. Reference
+    parsing needs no equivalent, since EXTERNAL already classifies a
+    scheme-prefixed target as external.
+    """
+    return URL.sub(lambda m: "\0" * (m.end() - m.start()), line)
 
 
 def parse_refs(idx: Index, rel: str) -> list[Ref]:

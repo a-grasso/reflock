@@ -483,6 +483,81 @@ items:
       Same class as closed issue #4 - a slug that diverged from GitHub's,
       producing a false DANGLING. Found by dogfooding this queue.
 
+  # --- suspects precision, from the kai-crm dogfooding run 2026-07-30 -------
+  # `suspects --all` on a real repo returned 200 findings of which ~4 were real.
+  # Sequenced by signal recovered per unit of work; BUG-12 is last because it is
+  # the only one that withdraws a claim rather than fixing a slip.
+  - id: BUG-08
+    title: URL path segments are reported as suspects
+    source: kai-crm dogfooding 2026-07-30
+    tier: near
+    owner: agent
+    status: done
+    contract: roadmap/BUG-08-suspects-url-segments.md
+    blocked_by: []
+    touches: [reflock_lib/grammar.py, reflock_lib/engine.py, reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      PATHISH excluded URLs only by accident of its lookbehind; an `@` in an npm
+      scope re-opens a match mid-URL. Three-quarters of one repo's 200 findings.
+      Fixed by masking URLs like code spans, not by widening the lookbehind.
+
+  - id: BUG-09
+    title: shell variables and `.../` elisions are matched as paths
+    source: kai-crm dogfooding 2026-07-30
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-09-suspects-shell-vars-and-elision.md
+    blocked_by: []
+    touches: [reflock_lib/grammar.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      `$scriptDir/...` reported the variable name as a directory; `a/.../b.kt`
+      reported a human's elision placeholder. Both are grammar-level: neither
+      shape is path-shaped.
+
+  - id: BUG-10
+    title: suspects prints a truncated path that appears nowhere in the source
+    source: kai-crm dogfooding 2026-07-30
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-10-suspects-truncated-extension.md
+    blocked_by: []
+    touches: [reflock_lib/grammar.py, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      The extension cap silently truncated rather than rejecting, so
+      `maven-wrapper.properties` was reported as `maven-wrapper.proper` - a
+      string nobody wrote, asserted not to resolve. Match whole or not at all.
+
+  - id: BUG-11
+    title: suspects scans lockfiles, wrappers and ignore files
+    source: kai-crm dogfooding 2026-07-30
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-11-suspects-vendored-sources.md
+    blocked_by: []
+    touches: [reflock_lib/engine.py, reflock_lib/commands.py, README.md, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      .reflockignore already covers this but requires every consumer to
+      rediscover it. A built-in skip list for never-authored sources, scoped to
+      `suspects` only so the gate `check` applies does not shrink.
+
+  - id: BUG-12
+    title: a bare path has no single base to resolve against
+    source: kai-crm dogfooding 2026-07-30
+    tier: near
+    owner: agent
+    status: ready
+    contract: roadmap/BUG-12-suspects-relative-base.md
+    blocked_by: []
+    touches: [reflock_lib/engine.py, reflock_lib/commands.py, README.md, test_reflock.py, evalbench/fixtures/]
+    note: >-
+      Runtime artifacts like `../data/crm.db` escaped the gitignore pass because
+      the probe got the wrong candidate. Adds the root-relative reading plus D4-
+      style tail resolution. The recipe-working-directory case stays out of
+      reach by design and is documented as such.
+
   # --- human-owned: design decisions ----------------------------------------
   # Listed so the orchestrator can see them and skip them, not to schedule them.
   - id: NS-01
