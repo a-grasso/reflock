@@ -15,6 +15,7 @@ from reflock_lib.engine import (
     git_ignored,
     locate_anchor,
     mask_code_spans,
+    mask_urls,
     parse_refs,
     resolve_path,
     resolve_target,
@@ -551,7 +552,9 @@ def cmd_suspects(idx: Index, args) -> int:
             # references themselves (D2, BUG-02): a path in backticks is prose
             # *about* a path. Raw lines for non-markdown, exactly as parse_refs
             # does - a backtick in a .py file is not a code span.
-            scan = mask_code_spans(ln) if is_md else ln
+            # URLs are masked in every file (BUG-08): a URL in a .json string
+            # literal is no more a repo path than one in prose.
+            scan = mask_urls(mask_code_spans(ln) if is_md else ln)
             for m in PATHISH.finditer(scan):
                 tok = m.group("p")
                 if any(tok in t for t in refd):

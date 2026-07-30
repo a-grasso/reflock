@@ -41,6 +41,19 @@ PATHISH = re.compile(
     r"(?<![\w./])(?P<p>(?:\.\.?/)?(?:[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,5})"
 )
 EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|//|#)")  # url scheme, //, or same-page #
+# A URL, for masking before the `suspects` scan: a URL's path segments are not
+# repo paths. PATHISH only ever excluded them by accident of its lookbehind -
+# inside `https://host/a/b.html` every candidate start is preceded by `/` or
+# `.`, both excluded - and any character outside that class re-opens the hole
+# (`@` in an npm scope did; `~`, `+`, `,` and `=` are all legal in a segment).
+# Excluding the whole construct is the rule that holds.
+# The protocol-relative form demands a dotted host with an alphabetic TLD so a
+# `// see other/module.py` comment in a code file is not read as a URL and
+# silently dropped from the scan.
+URL = re.compile(
+    r"[a-zA-Z][a-zA-Z0-9+.\-]*://\S+"
+    r"|//[\w\-]+(?:\.[\w\-]+)*\.[A-Za-z]{2,}/\S*"
+)
 PIN_STRIP = re.compile(r"<!--@[0-9a-f]*-->|(?<=@)[0-9a-f]{%d}\b" % FP_LEN)
 
 
