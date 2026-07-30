@@ -1,0 +1,13 @@
+{
+  "description": "BUG-09: `.../` in prose is a human's elision - 'some path under here, spelled short' - and is correctly unresolvable, so reporting it is noise. PATHISH now refuses a `...` segment, and refuses it whole: the trailing `domain/Signal.kt` fragment is not reported either, because half a placeholder would be worse than nothing. The genuine dangling reference on line 2 still is.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"file": "plan.md", "line": 2, "target": "doc/tickets/wp1.md"}
+      ]
+    }
+  ]
+}
