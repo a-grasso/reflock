@@ -462,6 +462,14 @@ touching nothing else.
   `suspects`-only: `check` still verifies an explicit `REF:` anywhere, because
   that is a claim someone wrote. For anything else your repo generates, add it
   to `.reflockignore`.
+- **`suspects` will not claim a path is rot when it can't tell.** A bare path is
+  resolved relative to the file it appears in, relative to the repo root, and
+  against every path already in the tree; if any of those reads resolves - or
+  git ignores it - the token is dropped. What stays out of reach is a path whose
+  base is a *working directory*: `dist/out.json` in a `Justfile` recipe that
+  `cd`s elsewhere first is relative to a directory only the recipe knows. Those
+  are reported, and `.reflockignore` is the answer if a build file's paths are
+  noise for you.
 - **Heading slugs are the fragile link.** Renaming a heading changes its
   auto-slug → `DANGLING`. That's caught, not silent; add an explicit
   `reflock-anchor` on hot sections if the churn annoys you.

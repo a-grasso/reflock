@@ -1,0 +1,14 @@
+{
+  "description": "BUG-12: the gitignore pass got the wrong candidate for a path whose base is a process working directory. `../data/crm.db` from a nested source resolves to nonsense relative to the file, while the path the author meant - `data/crm.db` from the root - is gitignored, i.e. intentionally absent. The root-relative reading now joins the candidate set. A candidate can only suppress a finding, never create one, which is what makes adding it safe: ../gone/x.py, ignored by nothing, is still reported.",
+  "git": {"track": [".gitignore", "src/main/App.kt"]},
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--all", "--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"file": "src/main/App.kt", "line": 2, "target": "../gone/x.py"}
+      ]
+    }
+  ]
+}

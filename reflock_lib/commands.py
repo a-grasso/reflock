@@ -18,9 +18,11 @@ from reflock_lib.engine import (
     mask_code_spans,
     mask_urls,
     parse_refs,
+    path_tails,
     resolve_path,
     resolve_target,
     resolve_wikilink,
+    strip_dot_segments,
     unit_fingerprint,
     unit_text,
 )
@@ -537,6 +539,7 @@ def cmd_suspects(idx: Index, args) -> int:
     except ScopeError as e:
         render_error(str(e), intended_format(args))
         return 2
+    tails = path_tails(idx)  # once per run; a hashmap lookup per token (PERF-01)
     for rel in scoped:
         if is_unauthored_source(rel):
             continue
@@ -567,7 +570,16 @@ def cmd_suspects(idx: Index, args) -> int:
                     continue
                 if tok in idx.files or tok.rstrip("/") in idx.dirs:
                     continue
-                candidates.append((rel, i + 1, tok, [c for c in (rp, tok) if c]))
+                # Resolves somewhere in the tree, just not from the base guessed
+                # here - not evidence of rot (BUG-12, on D4's precedent).
+                bare = strip_dot_segments(tok)
+                if tok in tails or bare in tails:
+                    continue
+                # `bare` rather than `tok` for the gitignore probe: a path whose
+                # base is a working directory is only ever ignored under its
+                # root-relative reading, and `git check-ignore` has no
+                # meaningful answer for a `..`-prefixed path.
+                candidates.append((rel, i + 1, tok, [c for c in (rp, bare) if c]))
     # Pass 2: a path git would ignore is intentionally absent, not a stale ref.
     ignored = git_ignored(idx.root, sorted({c for *_, cs in candidates for c in cs}))
     hits = [(rel, lineno, tok) for rel, lineno, tok, cands in candidates

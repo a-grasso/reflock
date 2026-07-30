@@ -24,6 +24,7 @@ _spec.loader.exec_module(reflock)
 # invoked internally (not just called directly from this test file) must patch
 # it where the calling code actually looks it up.
 from reflock_lib import engine as reflock_engine
+from reflock_lib import commands as reflock_commands
 from reflock_lib import cli as reflock_cli
 from reflock_lib import setup as reflock_setup
 
@@ -784,6 +785,66 @@ class ReflockTest(unittest.TestCase):
                                os.path.join(self.d, "package-lock.json")])
         self.assertEqual(0, rc)
         self.assertEqual([], json.loads(buf.getvalue()))
+
+    # --- BUG-12: a bare path has no single base to resolve against -----------
+    def git_init(self, *tracked):
+        reflock.run(["git", "init", "-q"], self.d)
+        for rel in tracked:
+            reflock.run(["git", "add", rel], self.d)
+
+    def test_suspects_gitignored_via_the_root_relative_reading(self):
+        """`../data/crm.db` from a nested source resolves to nonsense relative to
+        the file; the path the author meant is `data/crm.db` from the root, which
+        git ignores. A candidate can only ever suppress, so adding it is safe."""
+        self.write(".gitignore", "data/\n")
+        self.write("src/main/App.kt", 'val db = "../data/crm.db"\n')
+        self.git_init(".gitignore", "src/main/App.kt")
+        self.assertEqual([], self.suspects_hits("--all"))
+
+    def test_suspects_reports_dotted_token_when_nothing_is_gitignored(self):
+        self.write(".gitignore", "build/\n")
+        self.write("src/main/App.kt", 'val p = "../gone/x.py"\n')
+        self.git_init(".gitignore", "src/main/App.kt")
+        self.assertEqual(["../gone/x.py"], self.suspects_hits("--all"))
+
+    def test_suspects_tail_resolves_elsewhere_in_the_tree(self):
+        self.write("platform/domain/catalog/Ontology.kt", "class Ontology\n")
+        self.write("a.md", "The catalog lives in catalog/Ontology.kt today.\n")
+        self.assertEqual([], self.suspects_hits())
+
+    def test_tail_matching_respects_segment_boundaries(self):
+        self.write("platform/catalog/Ontology.kt", "class Ontology\n")
+        self.write("a.md", "See log/Ontology.kt for the writer.\n")
+        self.assertEqual(["log/Ontology.kt"], self.suspects_hits())
+
+    def test_path_tails_excludes_bare_basenames(self):
+        """PATHISH requires a slash, so a basename is never a token - the tail
+        set stays two-or-more segments so the leniency cannot widen past that."""
+        self.write("platform/domain/catalog/Ontology.kt", "class Ontology\n")
+        tails = reflock.path_tails(reflock.build_index(self.d))
+        self.assertIn("catalog/Ontology.kt", tails)
+        self.assertIn("domain/catalog/Ontology.kt", tails)
+        self.assertNotIn("Ontology.kt", tails)
+
+    def test_no_dotdot_candidate_is_handed_to_git_check_ignore(self):
+        self.write("a.md", "See ../../way/up/gone.md here.\n")
+        seen = []
+        real = reflock.git_ignored
+
+        def spy(root, paths):
+            seen.extend(paths)
+            return real(root, paths)
+
+        with mock.patch.object(reflock_commands, "git_ignored", spy):
+            self.suspects_hits()
+        self.assertTrue(seen, "the gitignore pass must still run")
+        for p in seen:
+            self.assertNotIn("..", p.split("/"))
+
+    def test_suspects_still_catches_a_path_absent_everywhere(self):
+        """The flagship case: platform/research.sh deleted, prose left behind."""
+        self.write("a.md", "The twin of platform/research.sh does the same.\n")
+        self.assertEqual(["platform/research.sh"], self.suspects_hits())
 
     # --- UX-01: the unit text is a preview, not a dump ----------------------
     def long_target(self, n, anchor=False):

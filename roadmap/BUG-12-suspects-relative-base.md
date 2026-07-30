@@ -59,10 +59,17 @@ reason to believe this is rot?" - so uniqueness is irrelevant here and requiring
 it would only re-introduce false positives. Stating that difference is the point
 of citing D4 rather than reusing its resolver.
 
-Implementation note: the tails are precomputed once into a set on the index
-(every segment-boundary suffix of every indexed path), not searched per
-candidate, so this stays a hashmap lookup per token in keeping with PERF-01's
-standard for the hot path.
+Implementation note: the tails are precomputed once into a set (every
+segment-boundary suffix of every indexed path), not searched per candidate, so
+this stays a hashmap lookup per token in keeping with PERF-01's standard for the
+hot path. Refined during implementation: the set is built once per `suspects`
+run rather than as a field on `Index`, since no other command needs it and
+`build_index` is on every command's path.
+
+Second refinement: the verbatim token is *replaced* by its root-relative reading
+in the gitignore candidate list rather than joined by it. For a token with no
+dotted prefix the two are identical, and for one with a prefix the verbatim form
+is exactly the `..`-prefixed path the invariant below forbids sending to git.
 
 ## Explicitly out of scope
 

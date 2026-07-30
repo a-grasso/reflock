@@ -1,0 +1,13 @@
+{
+  "description": "BUG-12: a token that names a path existing somewhere in the tree resolves - just not from the base reflock guessed - so calling it rot is a claim reflock cannot support. D4 is the precedent: wiki-links already fall back from relative resolution to a match across the index. D4 needs its match to be unique because it must pick one target to fingerprint; suspects picks nothing, so uniqueness is irrelevant here. A genuinely absent sibling in the same directory is still reported.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"file": "a.md", "line": 2, "target": "catalog/Missing.kt"}
+      ]
+    }
+  ]
+}
