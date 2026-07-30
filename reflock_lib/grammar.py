@@ -45,8 +45,17 @@ HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*\s*$")
 #     unresolvable. The lookbehind then also blocks a restart after the `/`, so
 #     the trailing `b.kt` half is not reported either, which is the intent:
 #     half a placeholder is worse than nothing.
+# The extension is matched to its own end or not at all (BUG-10): the old
+# {0,5} cap silently *truncated*, so `maven-wrapper.properties` was reported as
+# `maven-wrapper.proper` - a string absent from the file, then asserted not to
+# resolve. The trailing (?!\w) is what makes a match whole; the cap widened to
+# 9 so the longest real extensions (.properties, .markdown) fit rather than
+# vanishing. A cap still bounds *which* tokens match - it keeps
+# `and/or something.Nevertheless` out - but never what a matched token looks
+# like. Extensions past it are a bounded blind spot, which is the failure mode
+# an advisory heuristic is allowed to have; reporting a token wrong is not.
 PATHISH = re.compile(
-    r"(?<![\w./$])(?P<p>(?:\.\.?/)?(?:(?!\.\.\./)[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,5})"
+    r"(?<![\w./$])(?P<p>(?:\.\.?/)?(?:(?!\.\.\./)[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,9})(?!\w)"
 )
 EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|//|#)")  # url scheme, //, or same-page #
 # A URL, for masking before the `suspects` scan: a URL's path segments are not
