@@ -506,7 +506,7 @@ items:
     source: kai-crm dogfooding 2026-07-30
     tier: near
     owner: agent
-    status: ready
+    status: done
     contract: roadmap/BUG-09-suspects-shell-vars-and-elision.md
     blocked_by: []
     touches: [reflock_lib/grammar.py, test_reflock.py, evalbench/fixtures/]

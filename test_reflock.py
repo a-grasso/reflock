@@ -688,6 +688,36 @@ class ReflockTest(unittest.TestCase):
         self.assertNotIn("babel", masked)
         self.assertIn("docs/gone.md", masked)
 
+    # --- BUG-09: shell variables and `.../` elisions are not paths -----------
+    def test_suspects_ignores_shell_variable_path(self):
+        self.write("run.sh", 'cp "$scriptDir/conf/app.xml" /tmp\n')
+        self.assertEqual([], self.suspects_hits("--all"))
+
+    def test_suspects_ignores_braced_shell_variable_path(self):
+        """Unmatched today by accident of the segment class; pinned deliberately."""
+        self.write("run.sh", 'cp "${scriptDir}/conf/app.xml" /tmp\n')
+        self.assertEqual([], self.suspects_hits("--all"))
+
+    def test_suspects_ignores_elided_path(self):
+        self.write("a.md", "Lives in platform/domain/.../domain/Signal.kt today.\n")
+        self.assertEqual([], self.suspects_hits())
+
+    def test_pathish_reports_no_half_of_an_elision(self):
+        """Half a placeholder would be worse than nothing, so the guarantee is
+        asserted on the pattern rather than inferred from the command."""
+        found = [m.group("p") for m in
+                 reflock.PATHISH.finditer("platform/domain/.../domain/Signal.kt")]
+        self.assertEqual([], found)
+
+    def test_suspects_still_catches_dot_prefixed_relative_paths(self):
+        """One leading dot segment or two is a relative path; three is an elision."""
+        self.write("doc/a.md", "See ../gone/x.md and ./also-gone/y.md here.\n")
+        self.assertEqual(["../gone/x.md", "./also-gone/y.md"], self.suspects_hits())
+
+    def test_suspects_dollar_earlier_in_line_does_not_silence_a_token(self):
+        self.write("run.sh", 'echo "$HOME" # see other/module.py for details\n')
+        self.assertEqual(["other/module.py"], self.suspects_hits("--all"))
+
     # --- UX-01: the unit text is a preview, not a dump ----------------------
     def long_target(self, n, anchor=False):
         head = "# T\n\n## Sec\n\n" if anchor else ""

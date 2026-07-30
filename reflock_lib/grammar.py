@@ -37,8 +37,16 @@ ANCHOR_OPEN = re.compile(r"reflock-anchor:\s*(?P<name>[\w.\-/]+)")
 ANCHOR_END = re.compile(r"reflock-anchor-end:\s*(?P<name>[\w.\-/]+)")
 HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*\s*$")
 # A path-shaped token for the `suspects` heuristic: has a slash and an extension.
+# Two shapes are deliberately not path-shaped (BUG-09):
+#   `$` in the lookbehind - `$scriptDir/a/b.c` is a shell/Make/CI variable, and
+#     its first segment is a runtime value, not a directory. (`${VAR}/a/b.c` and
+#     `$(VAR)/a/b.c` never matched: `}` and `)` break the segment class.)
+#   a `...` segment - `a/.../b.kt` is a human's elision placeholder, correctly
+#     unresolvable. The lookbehind then also blocks a restart after the `/`, so
+#     the trailing `b.kt` half is not reported either, which is the intent:
+#     half a placeholder is worse than nothing.
 PATHISH = re.compile(
-    r"(?<![\w./])(?P<p>(?:\.\.?/)?(?:[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,5})"
+    r"(?<![\w./$])(?P<p>(?:\.\.?/)?(?:(?!\.\.\./)[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,5})"
 )
 EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|//|#)")  # url scheme, //, or same-page #
 # A URL, for masking before the `suspects` scan: a URL's path segments are not

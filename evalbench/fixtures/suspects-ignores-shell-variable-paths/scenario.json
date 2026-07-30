@@ -1,0 +1,13 @@
+{
+  "description": "BUG-09: PATHISH's lookbehind excluded [\\w./] but not `$`, so a match started right after the sigil and reported the variable name as the first directory segment - `scriptDir/.mvn/wrapper/...` from a wrapper script. The base of such a path is a runtime value, so no reading of it is checkable. A genuine bare path on the next line is still reported, so excluding the sigil did not blind the scan.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--all", "--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"file": "mvnw-like.sh", "line": 3, "target": "build/snapshot.py"}
+      ]
+    }
+  ]
+}
