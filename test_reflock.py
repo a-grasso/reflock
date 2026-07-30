@@ -718,6 +718,33 @@ class ReflockTest(unittest.TestCase):
         self.write("run.sh", 'echo "$HOME" # see other/module.py for details\n')
         self.assertEqual(["other/module.py"], self.suspects_hits("--all"))
 
+    # --- BUG-10: a matched token is whole or absent, never truncated ---------
+    def test_suspects_reports_long_extension_whole(self):
+        self.write("run.sh", 'load "conf/app.properties"\n')
+        self.assertEqual(["conf/app.properties"], self.suspects_hits("--all"))
+
+    def test_suspects_reports_markdown_extension_whole(self):
+        self.write("a.md", "See doc/notes.markdown for the long form.\n")
+        self.assertEqual(["doc/notes.markdown"], self.suspects_hits())
+
+    def test_pathish_skips_an_over_long_extension_rather_than_truncating(self):
+        found = [m.group("p") for m in reflock.PATHISH.finditer("a/b.extensionwaytoolong")]
+        self.assertEqual([], found, "an over-long extension is skipped, not clipped")
+
+    def test_every_suspect_appears_verbatim_in_the_line_it_cites(self):
+        """The invariant BUG-10 violated: reflock reported `maven-wrapper.proper`
+        for a line reading `maven-wrapper.properties`, then asserted the clipped
+        string does not resolve - trivially true of a string nobody wrote."""
+        line = "load conf/app.properties, doc/n.markdown, lib/x.so and t/y.tgz\n"
+        self.write("run.sh", line)
+        for tok in self.suspects_hits("--all"):
+            self.assertIn(tok, line)
+
+    def test_suspects_ignores_version_string_after_widened_extension_cap(self):
+        """Regression lock: the widened cap must not make a version path-shaped."""
+        self.write("a.md", "Runs on Opus 4.8/4.7/4.6 today.\n")
+        self.assertEqual([], self.suspects_hits())
+
     # --- UX-01: the unit text is a preview, not a dump ----------------------
     def long_target(self, n, anchor=False):
         head = "# T\n\n## Sec\n\n" if anchor else ""

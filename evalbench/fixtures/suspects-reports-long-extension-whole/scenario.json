@@ -1,0 +1,13 @@
+{
+  "description": "BUG-10: PATHISH capped the extension at six characters and silently truncated rather than rejecting, so `maven-wrapper.properties` was reported as `maven-wrapper.proper` - a string absent from the file, asserted not to resolve. The cap now bounds which tokens match, never what a matched token looks like, so the reported target appears verbatim in the line it cites.",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--all", "--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"file": "boot.sh", "line": 2, "target": "conf/app.properties"}
+      ]
+    }
+  ]
+}
