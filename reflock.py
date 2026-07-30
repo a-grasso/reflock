@@ -68,11 +68,13 @@ from reflock_lib.grammar import (
     Ref,
 )
 from reflock_lib.engine import (
+    UNAUTHORED_SOURCES,
     build_index,
     classify,
     fingerprint,
     git_ignored,
     is_text,
+    is_unauthored_source,
     list_files,
     locate_anchor,
     mask_code_spans,

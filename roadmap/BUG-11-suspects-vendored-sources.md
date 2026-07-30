@@ -35,7 +35,9 @@ that makes the mechanical layer worth running at all.
 
 `cmd_suspects` skips a documented set of never-authored sources by default:
 
-- lockfiles: `*.lock`, `*-lock.json`, `go.sum`
+- lockfiles: `*.lock`, `*-lock.json`, `*-lock.yaml`, `go.sum`
+  (`*-lock.yaml` added during implementation for pnpm, which neither of the
+  other two globs covers)
 - build-tool wrappers: `mvnw`, `mvnw.cmd`, `gradlew`, `gradlew.bat`, and
   anything under a `*/wrapper/` directory of those tools
 - ignore/attribute files: `.gitignore`, `.gitattributes`, `.dockerignore`,

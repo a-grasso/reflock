@@ -13,6 +13,7 @@ from reflock_lib.grammar import EXTERNAL, PATHISH, Index, Ref
 from reflock_lib.engine import (
     classify,
     git_ignored,
+    is_unauthored_source,
     locate_anchor,
     mask_code_spans,
     mask_urls,
@@ -537,6 +538,8 @@ def cmd_suspects(idx: Index, args) -> int:
         render_error(str(e), intended_format(args))
         return 2
     for rel in scoped:
+        if is_unauthored_source(rel):
+            continue
         is_md = rel.endswith((".md", ".markdown"))
         if not args.all and not is_md:
             continue

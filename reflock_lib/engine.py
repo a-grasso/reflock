@@ -75,6 +75,37 @@ def read_reflockignore(root: str) -> list[str]:
         return [ln.strip() for ln in fh if ln.strip() and not ln.lstrip().startswith("#")]
 
 
+# Sources the `suspects` heuristic never guesses from (BUG-11): generated,
+# vendored verbatim, or holding *patterns* rather than references - reporting a
+# path in a .gitignore as a reference that fails to resolve inverts its meaning.
+# fnmatch globs on the repo-relative path; `node_modules/` and `.git/` are
+# already excluded upstream in list_files and are not restated here.
+#
+# `suspects` only. `check` acts on explicit reference syntax an author wrote,
+# and a REF: comment in a vendored file is still a claim worth verifying, so
+# narrowing the skip to the guessing command is what keeps the gate from
+# quietly shrinking. Anything not on this fixed list stays the user's
+# .reflockignore call.
+UNAUTHORED_SOURCES = (
+    "*.lock", "*-lock.json", "*-lock.yaml", "go.sum",         # dependency locks
+    "mvnw", "mvnw.cmd", "gradlew", "gradlew.bat",             # build-tool wrappers
+    ".mvn/wrapper/*", "gradle/wrapper/*",
+    ".gitignore", ".gitattributes", ".dockerignore",          # pattern lists
+    ".npmignore", ".eslintignore", ".prettierignore", ".reflockignore",
+    "vendor/*", "third_party/*",                              # vendored trees
+)
+
+
+def is_unauthored_source(rel: str) -> bool:
+    """Whether `suspects` skips this file outright - see UNAUTHORED_SOURCES.
+
+    Each glob is tested at the root and under any directory, so one entry covers
+    both `package-lock.json` and `tools/showcase/package-lock.json`.
+    """
+    return any(fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(rel, "*/" + p)
+               for p in UNAUTHORED_SOURCES)
+
+
 def is_text(path: str) -> bool:
     try:
         with open(path, "rb") as fh:

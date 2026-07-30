@@ -745,6 +745,46 @@ class ReflockTest(unittest.TestCase):
         self.write("a.md", "Runs on Opus 4.8/4.7/4.6 today.\n")
         self.assertEqual([], self.suspects_hits())
 
+    # --- BUG-11: suspects does not guess from files nobody authored ----------
+    UNAUTHORED = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "go.sum",
+                  "mvnw", "gradlew", ".mvn/wrapper/maven-wrapper.properties",
+                  ".gitignore", ".dockerignore", "vendor/x.py",
+                  "third_party/y.py", "sub/package-lock.json", "sub/.gitignore"]
+
+    def test_suspects_skips_unauthored_sources(self):
+        for rel in self.UNAUTHORED:
+            with self.subTest(rel):
+                self.write(rel, "see gone/x.py for details\n")
+                self.assertEqual([], self.suspects_hits("--all"))
+                os.remove(os.path.join(self.d, rel))
+
+    def test_suspects_still_scans_a_hand_written_file(self):
+        self.write("app.py", "# see gone/x.py for details\n")
+        self.assertEqual(["gone/x.py"], self.suspects_hits("--all"))
+
+    def test_suspects_skip_list_never_matches_markdown(self):
+        self.write("notes.lockfile.md", "See gone/x.py here.\n")
+        self.assertEqual(["gone/x.py"], self.suspects_hits())
+
+    def test_check_still_verifies_a_ref_inside_a_skipped_file(self):
+        """The skip is scoped to the guessing command: a REF: someone wrote in a
+        vendored file is still a claim, and check still verifies it."""
+        self.write("package-lock.json", '{ "name": "x" } // REF: gone/x.py\n')
+        rc, findings = self.check_json()
+        self.assertEqual(1, rc)
+        self.assertEqual(["DANGLING"], [f["verdict"] for f in findings])
+
+    def test_suspects_scoped_to_a_skipped_file_is_empty_not_an_error(self):
+        """Matched and simply empty, as scoped_files already promises for
+        .reflockignore - not BUG-04's unmatched-scope error."""
+        self.write("package-lock.json", "see gone/x.py for details\n")
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "suspects", "--all", "--json",
+                               os.path.join(self.d, "package-lock.json")])
+        self.assertEqual(0, rc)
+        self.assertEqual([], json.loads(buf.getvalue()))
+
     # --- UX-01: the unit text is a preview, not a dump ----------------------
     def long_target(self, n, anchor=False):
         head = "# T\n\n## Sec\n\n" if anchor else ""
