@@ -453,6 +453,15 @@ touching nothing else.
 - **`suspects` is a heuristic, not a gate.** It finds path-shaped prose that
   doesn't resolve. Expect some false positives (external citations); use it to
   *migrate* prose into links, not in CI.
+- **`suspects` skips files nobody authored references in.** Dependency locks
+  (`*.lock`, `*-lock.json`, `go.sum`), build-tool wrappers (`mvnw`, `gradlew`
+  and their `wrapper/` directories), pattern lists (`.gitignore`,
+  `.dockerignore`, …) and `vendor/`/`third_party/` trees. A path in a generated
+  file is a fact about a build tool, and a path in a `.gitignore` is a *pattern* -
+  reporting either as a failed reference inverts its meaning. The skip is
+  `suspects`-only: `check` still verifies an explicit `REF:` anywhere, because
+  that is a claim someone wrote. For anything else your repo generates, add it
+  to `.reflockignore`.
 - **Heading slugs are the fragile link.** Renaming a heading changes its
   auto-slug → `DANGLING`. That's caught, not silent; add an explicit
   `reflock-anchor` on hot sections if the churn annoys you.

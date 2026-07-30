@@ -1,0 +1,14 @@
+{
+  "description": "BUG-11: suspects scanned every text file, so it guessed at lockfiles and wrappers (generated or vendored - a path in one is a fact about a build tool) and at .gitignore (which holds patterns, not references, so reporting one inverts its meaning). A built-in skip list covers the never-authored sources, and .reflockignore stays the escape hatch for anything else. The hand-written app.py is still scanned.",
+  "git": {"track": ["package-lock.json", "mvnw", ".gitignore", ".mvn/wrapper/maven-wrapper.properties", "app.py"]},
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": ["--all", "--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {"file": "app.py", "line": 1, "target": "gone/module.py"}
+      ]
+    }
+  ]
+}

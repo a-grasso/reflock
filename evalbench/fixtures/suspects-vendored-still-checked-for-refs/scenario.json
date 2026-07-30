@@ -1,0 +1,30 @@
+{
+  "description": "BUG-11's scoping invariant: the vendored-source skip belongs to the guessing command only. check acts on explicit reference syntax an author wrote, so a REF: comment inside a lockfile is still a claim someone made and is still reported DANGLING. This is the fixture that would catch the skip leaking into the gate.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "DANGLING",
+          "file": "package-lock.json",
+          "line": 1,
+          "target": "gone/module.py",
+          "detail": "no such file: gone/module.py"
+        }
+      ]
+    },
+    {
+      "cmd": "suspects",
+      "args": [
+        "--all",
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json": []
+    }
+  ]
+}
