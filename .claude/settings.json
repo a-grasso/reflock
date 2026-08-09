@@ -1,12 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(make check)",
-      "Bash(make stamp)",
-      "Bash(make suspects)",
-      "Bash(make test)",
-      "Bash(make bench)",
-      "Bash(make gate)",
+      "Bash(just check)",
+      "Bash(just stamp)",
+      "Bash(just suspects)",
+      "Bash(just test)",
+      "Bash(just bench)",
+      "Bash(just gate)",
       "Bash(python3 reflock.py *)",
       "Bash(python3 -m unittest *)",
       "Bash(python3 evalbench/run_bench.py *)"
