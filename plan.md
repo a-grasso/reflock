@@ -209,9 +209,10 @@ Constraints:
 - Deliver two variants (short ~120 words, longer ~250 with the worked example
   from the README) plus a suggested first comment carrying the repo link.
 
-**Done:** [docs/announcement-linkedin.md](docs/announcement-linkedin.md). Both
-variants plus a first comment carrying both repo links, and a short note on why
-the post leads with the problem and keeps AI agents out of the opening.
+**Done, and deliberately not committed.** Both variants plus a first comment
+carrying both repo links, handed over outside the repo: post copy is marketing
+material with a shelf life of one day, and the repo is the product. Nothing here
+should read as if the tool ships its own press release.
 
 ---
 
