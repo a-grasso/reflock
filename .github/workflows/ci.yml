@@ -1,0 +1,75 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Unit tests
+        run: python3 -m unittest -v test_reflock
+      - name: Behavioural fixtures
+        run: python3 evalbench/run_bench.py
+      - name: reflock checks its own references
+        run: python3 reflock.py check
+
+  install-layouts:
+    # The two ways reflock reaches a user's PATH, both of which put the entry
+    # point somewhere other than the checkout. Homebrew shipped reflock.py
+    # without reflock_lib for a whole release cycle and nothing noticed, because
+    # every other job runs from the repo root where the import happens to work.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: install.sh symlink layout
+        run: |
+          REFLOCK_SRC="$PWD" REFLOCK_BIN_DIR="$HOME/.local/bin" ./install.sh
+          cd "$(mktemp -d)"
+          "$HOME/.local/bin/reflock" --version
+          printf '# H\n\n## Decision\n\nWe chose X.\n' > t.md
+          printf 'Per [d](t.md#decision)<!--@-->.\n' > a.md
+          "$HOME/.local/bin/reflock" stamp
+          "$HOME/.local/bin/reflock" check
+
+      - name: Homebrew libexec layout
+        run: |
+          prefix="$(mktemp -d)"
+          mkdir -p "$prefix/libexec" "$prefix/bin"
+          cp reflock.py "$prefix/libexec/"
+          cp -r reflock_lib "$prefix/libexec/"
+          ln -s ../libexec/reflock.py "$prefix/bin/reflock"
+          chmod +x "$prefix/libexec/reflock.py"
+          cd "$(mktemp -d)"
+          "$prefix/bin/reflock" --version
+          printf '# H\n\n## Decision\n\nWe chose X.\n' > t.md
+          printf 'Per [d](t.md#decision)<!--@-->.\n' > a.md
+          "$prefix/bin/reflock" stamp
+          "$prefix/bin/reflock" check
+
+  stdlib-only:
+    # The project's central promise is a dependency-free single file. Nothing
+    # enforced it, so this does: import reflock with site-packages stripped, on
+    # a runner with nothing pip-installed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Import with no third-party packages available
+        run: python3 -S -c "import reflock; print(reflock.__version__)"
