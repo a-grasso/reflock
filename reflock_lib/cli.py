@@ -49,9 +49,12 @@ def build_parser() -> argparse.ArgumentParser:
                        epilog="examples:\n"
                               "  reflock stamp\n"
                               "  reflock stamp --check\n"
-                              "  reflock stamp --rebless\n")
+                              "  reflock stamp --rebless\n"
+                              "  reflock stamp --rebless --reviewed\n")
     s.add_argument("paths", nargs="*")
     s.add_argument("--rebless", action="store_true", help="re-hash existing pins too")
+    s.add_argument("--reviewed", action="store_true",
+                   help="with --rebless: confirm you read what drifted (required to write)")
     s.add_argument("--check", action="store_true",
                    help="report what stamp would do; write nothing")
     s.add_argument("--warn", action="store_true",

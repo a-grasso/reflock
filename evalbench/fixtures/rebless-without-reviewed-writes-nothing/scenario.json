@@ -1,0 +1,28 @@
+{
+  "description": "PUB-01: `stamp --rebless` refuses to discard a drift signal without --reviewed. It reports the re-blessing it would do, exits nonzero, and leaves the tree byte-identical - a gate that can be silenced by one flag is decoration.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 1,
+      "expect_contains": ["DRIFTED"]
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--rebless"],
+      "expect_exit": 1,
+      "expect_contains": ["--reviewed"],
+      "expect_tree_unchanged_since_step": 0
+    },
+    {
+      "cmd": "stamp",
+      "args": ["--rebless", "--reviewed"],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "description": "`stamp --rebless` re-hashes existing pins, clearing a DRIFTED verdict.",
+  "description": "`stamp --rebless --reviewed` re-hashes existing pins, clearing a DRIFTED verdict. --reviewed is required to write (PUB-01); the refusal without it has its own fixture.",
   "steps": [
     {
       "cmd": "stamp",
@@ -20,7 +20,8 @@
     {
       "cmd": "stamp",
       "args": [
-        "--rebless"
+        "--rebless",
+        "--reviewed"
       ],
       "expect_exit": 0
     },
