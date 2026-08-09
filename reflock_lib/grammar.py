@@ -8,16 +8,29 @@ from dataclasses import dataclass, field
 
 FP_LEN = 8  # hex chars of sha256; 32 bits — a missed drift is ~1 in 4e9
 
+# The fingerprint algorithm a *new* pin is written under. A stamp is a published
+# wire format the moment `stamp` runs in someone else's repo, and inline pins
+# cannot be migrated the way a single lockfile field can — so the version is
+# reserved now, while it is free (NORTHSTARS #11).
+#
+# Bare hex (`@a1b2c3d4`) means version 1 and is what `stamp` writes; nothing in
+# the field changes. A future algorithm ships as `@2:newhex`, and a reflock too
+# old to know that version says so plainly instead of reporting a false DRIFTED.
+FP_VERSION = 1
+# The pin body, shared by every reference pattern: an optional `N:` version
+# prefix, then hex. Empty still means opted-in-but-unstamped.
+PIN_BODY = r"(?:[0-9]+:)?[0-9a-f]*"
+
 # A markdown link, with an optional trailing pin comment. The pin's hex is its
 # own group so `stamp` can splice it in place (empty group == opted-in, unstamped).
 MD_REF = re.compile(
     r"\[[^\]]*\]\((?P<target>[^)\s]+)(?:\s+\"[^\"]*\")?\)"
-    r"(?:[\s.,;:!?]*<!--@(?P<pin>[0-9a-f]*)-->)?"
+    r"(?:[\s.,;:!?]*<!--@(?P<pin>%s)-->)?" % PIN_BODY
 )
 # A REF comment: a comment opener, then `REF: target`, optional ` @hex`.
 # The opener requirement keeps `REF:` inside prose or string literals from matching.
 CODE_REF = re.compile(
-    r"(?:#|//|/\*|<!--|--|;|\*)\s*REF:\s*(?P<target>[^\s@]+)(?:\s+@(?P<pin>[0-9a-f]*))?"
+    r"(?:#|//|/\*|<!--|--|;|\*)\s*REF:\s*(?P<target>[^\s@]+)(?:\s+@(?P<pin>%s))?" % PIN_BODY
 )
 # A reference-style link *definition* - `[id]: target "title"`. The pin lives
 # here, on the definition line, since a definition names its target exactly
@@ -25,13 +38,13 @@ CODE_REF = re.compile(
 # may repeat it many times.
 REF_DEF = re.compile(
     r'^\s*\[[^\]]+\]:\s+(?P<target>\S+?)(?:\s+"[^"]*")?'
-    r"(?:\s*<!--@(?P<pin>[0-9a-f]*)-->)?\s*$"
+    r"(?:\s*<!--@(?P<pin>%s)-->)?\s*$" % PIN_BODY
 )
 # A wiki-link: [[target]], [[target#anchor]], [[target|alias]], or both.
 # Alias is display text and split off at the first `|` only.
 WIKI_LINK = re.compile(
     r"\[\[(?P<target>[^\]|]+?)(?:\|[^\]]*)?\]\]"
-    r"(?:[\s.,;:!?]*<!--@(?P<pin>[0-9a-f]*)-->)?"
+    r"(?:[\s.,;:!?]*<!--@(?P<pin>%s)-->)?" % PIN_BODY
 )
 ANCHOR_OPEN = re.compile(r"reflock-anchor:\s*(?P<name>[\w.\-/]+)")
 ANCHOR_END = re.compile(r"reflock-anchor-end:\s*(?P<name>[\w.\-/]+)")
@@ -80,7 +93,8 @@ URL = re.compile(
     r"[a-zA-Z][a-zA-Z0-9+.\-]*://\S+"
     r"|//[\w\-]+(?:\.[\w\-]+)*\.[A-Za-z]{2,}/\S*"
 )
-PIN_STRIP = re.compile(r"<!--@[0-9a-f]*-->|(?<=@)[0-9a-f]{%d}\b" % FP_LEN)
+PIN_STRIP = re.compile(
+    r"<!--@(?:[0-9]+:)?[0-9a-f]*-->|(?<=@)(?:[0-9]+:)?[0-9a-f]{%d}\b" % FP_LEN)
 
 
 @dataclass

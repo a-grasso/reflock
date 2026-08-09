@@ -229,36 +229,21 @@ central claim rather than adding a new capability.
 
 ---
 
-## 11. The stamp format has no version tag, and it's a published wire format now *(Near, do before wide adoption)*
+## ~~11. The stamp format has no version tag~~ *(landed - v0.4.0)*
 
-**The scenario:** `FP_LEN` hex chars of truncated sha256 is not an
-implementation detail - it's a contract every adopting repo bakes into its
-files the moment `stamp` runs. If the hash function, truncation length, or
-normalization rule ever needs to change (a collision-margin concern, a
-mismatch discovered during the Rust port's differential testing against the
-eval bench), there is currently no way for a stamp to say "I was computed
-under the old rule." A change forces a choice between two bad options: freeze
-the algorithm forever, or force a false `DRIFTED` wave across every repo that
-adopted reflock in the meantime, the instant an update rolls out.
+Resolved. Bare hex now formally means fingerprint version 1, and the `@N:hex`
+form is reserved and parsed: a pin written under a version this reflock does not
+know is reported `UNSUPPORTED`, with the version and the remedy named, instead of
+a false `DRIFTED`. `stamp --rebless` leaves such a pin alone rather than
+downgrading it. So a future change to the hash function, the truncation length or
+the normalization rule can ship without a false-drift wave across every adopting
+repo - which is what this entry existed to buy, and why it had to land before
+announcing rather than after.
 
-**Why reflock can't do this today:** a stamp is bare hex - `@a1b2c3d4` - with
-no room for a version marker.
-
-**Shape of a solution:** reserve the version now, while adoption is small
-enough that this costs nothing: bare hex continues to mean "v1" (no behavior
-change, no migration needed today), and a future algorithm ships as
-`@2:newhex`; `check`/`stamp` read the prefix and dispatch to the matching
-fingerprint function. Cheap to add before stamps exist widely in the wild,
-expensive to retrofit after - this is exactly the kind of decision the
-"freeze the wire format before any port" sequencing note (below) is warning
-about, so it should land before, not during, that port.
-
-**Prior art:** [drift](DECISIONS.md#prior-art-under-observation) has only a
-coarse file-level lockfile version, no per-binding algorithm tag. The gap
-matters *more* for reflock: a lockfile can be migrated by bumping one field,
-whereas inline stamps (DECISIONS.md #1) are scattered across every referring
-file and cannot be. The cost of not reserving this is paid at exactly the
-moment adoption makes it expensive to fix.
+Kept as a stub rather than deleted because the sequencing note below ("freeze the
+wire format before any port") depends on it, and a differential test between a
+future port and this implementation is exactly where a version-2 fingerprint
+would first be needed.
 
 ---
 

@@ -23,6 +23,7 @@ from reflock_lib.grammar import (
     URL,
     WIKI_LINK,
     FP_LEN,
+    FP_VERSION,
     Index,
     Ref,
 )
@@ -189,6 +190,20 @@ def normalize(text: str) -> bytes:
 
 def fingerprint(text: str) -> str:
     return hashlib.sha256(normalize(text)).hexdigest()[:FP_LEN]
+
+
+def split_pin(pin: str) -> tuple[int, str]:
+    """Split a stamped pin into (algorithm version, hex).
+
+    Bare hex is version 1 — the only form `stamp` writes, and the only form in
+    the field today. `N:hex` is the reserved forward-compatible shape; parsing
+    it is what lets a future algorithm change land without every existing pin
+    turning into a false DRIFTED (NORTHSTARS #11).
+    """
+    ver, sep, rest = pin.partition(":")
+    if not sep:
+        return FP_VERSION, pin
+    return int(ver), rest
 
 
 def build_index(root: str) -> Index:
@@ -429,8 +444,15 @@ def classify(idx: Index, ref: Ref) -> tuple[str, str]:
             # provably does nothing.
             return "UNSTAMPED", f"cannot fingerprint: no indexed text in {path}"
         return "UNSTAMPED", "run: reflock stamp"
-    if actual != ref.pin:
-        return "DRIFTED", f"pinned @{ref.pin}, now @{actual}"
+    version, hexpart = split_pin(ref.pin)
+    if version != FP_VERSION:
+        # Saying so is the whole point of reserving the version: this reflock
+        # cannot compute a version-N fingerprint, so it must not claim the
+        # target drifted. Silence would be worse still - the pin is unverified.
+        return "UNSUPPORTED", (f"pin @{ref.pin} uses fingerprint version {version}; "
+                               f"this reflock understands version {FP_VERSION} - upgrade reflock")
+    if actual != hexpart:
+        return "DRIFTED", f"pinned @{hexpart}, now @{actual}"
     return "OK", "pinned"
 
 

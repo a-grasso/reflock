@@ -1,0 +1,19 @@
+{
+  "description": "A pin carrying a fingerprint version this reflock does not know is UNSUPPORTED, never a false DRIFTED (NORTHSTARS #11).",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "UNSUPPORTED",
+          "file": "a.md",
+          "line": 1,
+          "target": "t.md#decision",
+          "detail": "pin @2:deadbeef uses fingerprint version 2; this reflock understands version 1 - upgrade reflock"
+        }
+      ]
+    }
+  ]
+}

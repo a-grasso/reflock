@@ -1,0 +1,7 @@
+{
+  "description": "Reserving the version changes nothing for a bare pin: stamp still writes plain hex, and check reads it as version 1.",
+  "steps": [
+    {"cmd": "stamp", "args": [], "expect_exit": 0},
+    {"cmd": "check", "args": ["--json"], "expect_exit": 0}
+  ]
+}

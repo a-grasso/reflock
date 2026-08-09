@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-from reflock_lib.grammar import EXTERNAL, PATHISH, Index, Ref
+from reflock_lib.grammar import EXTERNAL, FP_VERSION, PATHISH, Index, Ref
 from reflock_lib.engine import (
     classify,
     git_ignored,
@@ -22,17 +22,19 @@ from reflock_lib.engine import (
     resolve_path,
     resolve_target,
     resolve_wikilink,
+    split_pin,
     strip_dot_segments,
     unit_fingerprint,
     unit_text,
 )
 
-BAD = {"DANGLING", "DRIFTED", "UNSTAMPED"}
+BAD = {"DANGLING", "DRIFTED", "UNSTAMPED", "UNSUPPORTED"}
 
 VERDICT_COLOR = {
     "DANGLING": "\033[31m",   # red
     "DRIFTED": "\033[33m",    # yellow
     "UNSTAMPED": "\033[35m",  # magenta
+    "UNSUPPORTED": "\033[36m",  # cyan
     "OK": "\033[32m",         # green
 }
 COLOR_RESET = "\033[0m"
@@ -133,7 +135,7 @@ def render_json(results, problems: int, args) -> int:
 
 def render_human(results, problems: int, args) -> int:
     color = use_color(args)
-    for v in ("DANGLING", "DRIFTED", "UNSTAMPED", "OK"):
+    for v in ("DANGLING", "DRIFTED", "UNSUPPORTED", "UNSTAMPED", "OK"):
         group = [(r, d) for vv, r, d in results if vv == v]
         if not group:
             continue
@@ -149,7 +151,8 @@ def render_human(results, problems: int, args) -> int:
     return 1 if problems else 0
 
 
-GITHUB_LEVEL = {"DANGLING": "error", "DRIFTED": "error", "UNSTAMPED": "warning"}
+GITHUB_LEVEL = {"DANGLING": "error", "DRIFTED": "error", "UNSTAMPED": "warning",
+                "UNSUPPORTED": "error"}
 
 
 def github_escape_property(text: str) -> str:
@@ -294,6 +297,11 @@ def plan_stamp(idx: Index, args):
                 continue                       # not opted in
             if ref.pin != "" and not args.rebless:
                 continue                       # existing pin, no --rebless
+            if ref.pin and split_pin(ref.pin)[0] != FP_VERSION:
+                # --rebless would splice a version-1 hex over a pin written by a
+                # newer reflock, silently downgrading it. `check` already says
+                # UNSUPPORTED; the honest move here is to leave it alone.
+                continue
             fp = stampable_fingerprint(idx, ref)
             if fp is None:
                 continue                       # nothing honest to hash
@@ -328,6 +336,22 @@ def cmd_stamp(idx: Index, args) -> int:
             return 0 if warn else 1
         print("\nNothing to stamp.")
         return 0
+    if args.rebless and not getattr(args, "reviewed", False) and report:
+        # The gate's whole claim is that a DRIFTED verdict is a real "someone
+        # should read this" event. Unguarded, `--rebless` discards that event
+        # with no friction, which is how a gate becomes decoration - so writing
+        # takes a second, explicit statement that a human (or agent) engaged
+        # with what changed. One rule in a TTY and in CI alike: a gate that
+        # behaves differently under a terminal is a gate people learn to
+        # distrust. See docs/roadmap/PUB-01-pre-announcement-scope.md.
+        for rel, ref, kind, fp in report:
+            if kind == "stale":
+                print(f"  {rel}:{ref.line}  {ref.target}   [@{ref.pin} -> @{fp}]")
+        print(f"\n{len(report)} pin(s) would be re-blessed, discarding the drift "
+              f"signal that flagged them.")
+        print("Read what changed (`reflock explain <file>:<line>`), then re-run "
+              "with --reviewed to write.")
+        return 1
     changed = 0
     for rel, edits in edits_by_rel.items():
         ap = os.path.join(idx.root, rel)

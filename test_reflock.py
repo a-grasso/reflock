@@ -466,7 +466,32 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(self.verdict("a.md"), "OK")
         self.write("t.md", "# H\n\n## Decision\n\nWe chose Y instead.\n")
         self.assertEqual(self.verdict("a.md"), "DRIFTED")
-        self.stamp("--rebless")
+        self.stamp("--rebless", "--reviewed")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
+    def test_rebless_without_reviewed_writes_nothing(self):
+        """The gate's claim is that DRIFTED is a real 'read this' event, so
+        discarding it takes an explicit second statement (PUB-01)."""
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        self.stamp()
+        before = self.read("a.md")
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose Y instead.\n")
+        self.assertEqual(self.verdict("a.md"), "DRIFTED")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = reflock.main(["--root", self.d, "stamp", "--rebless"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(self.read("a.md"), before, "refused rebless must not write")
+        self.assertIn("--reviewed", out.getvalue())
+        self.assertEqual(self.verdict("a.md"), "DRIFTED")
+
+    def test_reviewed_without_rebless_stamps_normally(self):
+        """--reviewed is a qualifier on --rebless, not a mode of its own: a
+        plain stamp of an unstamped pin is unaffected by it."""
+        self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
+        self.write("a.md", "Per [d](t.md#decision)<!--@-->.\n")
+        self.stamp("--reviewed")
         self.assertEqual(self.verdict("a.md"), "OK")
 
     def test_code_ref_and_span_anchor(self):
@@ -2571,17 +2596,45 @@ class VersionConsistencyTest(unittest.TestCase):
     by the only instructions given for reaching it. These tie the version facts
     together so the class of defect cannot recur silently."""
 
-    def setUp(self):
-        with open(os.path.join(REPO_ROOT, "README.md"), encoding="utf-8") as fh:
-            self.readme = fh.read()
+    REV = re.compile(r"^\s*rev:\s*v(\d+\.\d+\.\d+)\s*$", re.M)
 
-    def test_readme_precommit_rev_matches_version(self):
-        revs = re.findall(r"^\s*rev:\s*v(\d+\.\d+\.\d+)\s*$", self.readme, re.M)
-        self.assertTrue(revs, "README quotes no pre-commit rev: to check")
-        for rev in revs:
-            self.assertEqual(reflock.__version__, rev,
-                              "the documented pre-commit rev must name the release "
-                              "that contains .pre-commit-hooks.yaml")
+    def docs_quoting_a_rev(self):
+        """Every tracked markdown file, not just the README: the pre-commit
+        snippet now appears in the manual too, and a second copy that nobody
+        rewrites at release time is the same DOC-01 defect wearing a new hat."""
+        # README.md and docs/*.md - the files that *instruct* an adopter.
+        # docs/roadmap/ and docs/adr/ are historical records, and DOC-01 quotes
+        # an old rev as the bug it documents; rewriting those would be a lie.
+        paths = [os.path.join(REPO_ROOT, "README.md")]
+        docs = os.path.join(REPO_ROOT, "docs")
+        paths += [os.path.join(docs, n) for n in os.listdir(docs) if n.endswith(".md")]
+        found = {}
+        for p in paths:
+            with open(p, encoding="utf-8") as fh:
+                revs = self.REV.findall(fh.read())
+            if revs:
+                found[os.path.relpath(p, REPO_ROOT)] = revs
+        return found
+
+    def test_precommit_rev_matches_version_everywhere_it_is_quoted(self):
+        found = self.docs_quoting_a_rev()
+        self.assertIn("README.md", found, "README quotes no pre-commit rev: to check")
+        for rel, revs in found.items():
+            for rev in revs:
+                self.assertEqual(reflock.__version__, rev,
+                                  f"{rel}: the documented pre-commit rev must name "
+                                  "the release that contains .pre-commit-hooks.yaml")
+
+    def test_release_recipe_rewrites_every_doc_that_quotes_a_rev(self):
+        """The Justfile is what keeps the assertion above true at release time,
+        so it has to reach every file the assertion looks at."""
+        with open(os.path.join(REPO_ROOT, "Justfile"), encoding="utf-8") as fh:
+            recipe = fh.read()
+        self.assertIn("rev: v", recipe)
+        for rel in self.docs_quoting_a_rev():
+            top = rel.split(os.sep)[0]
+            self.assertIn(top, recipe,
+                          f"{rel} quotes a rev: that `just release` never rewrites")
 
     def test_version_flag_prints_the_module_version(self):
         buf = io.StringIO()
@@ -2736,6 +2789,38 @@ class BenchHarnessTest(unittest.TestCase):
             step = {"cmd": "check", "args": [], **spec}
             fails = self.run_steps(step)
             self.assertTrue(fails, f"{spec} refers to a step that has not run")
+
+
+class PinVersionTest(unittest.TestCase):
+    """The reserved fingerprint-version prefix (NORTHSTARS #11)."""
+
+    def test_bare_hex_is_version_1(self):
+        self.assertEqual(reflock_engine.split_pin("a1b2c3d4"), (1, "a1b2c3d4"))
+
+    def test_prefixed_pin_splits(self):
+        self.assertEqual(reflock_engine.split_pin("2:deadbeef"), (2, "deadbeef"))
+
+    def test_every_reference_pattern_accepts_a_versioned_pin(self):
+        cases = [
+            (reflock.MD_REF, "[t](t.md) <!--@2:deadbeef-->"),
+            (reflock.CODE_REF, "# REF: t.md @2:deadbeef"),
+            (reflock.REF_DEF, "[id]: t.md <!--@2:deadbeef-->"),
+            (reflock.WIKI_LINK, "[[t.md]] <!--@2:deadbeef-->"),
+        ]
+        for pat, line in cases:
+            with self.subTest(line=line):
+                m = pat.search(line)
+                self.assertIsNotNone(m, line)
+                self.assertEqual(m.group("pin"), "2:deadbeef")
+
+    def test_normalize_strips_a_versioned_pin(self):
+        """A versioned pin must not become part of the text it fingerprints -
+        otherwise stamping a file changes the hash of the file, and drift
+        cascades."""
+        self.assertEqual(reflock_engine.normalize("a [t](t.md) <!--@2:deadbeef--> b"),
+                         reflock_engine.normalize("a [t](t.md) <!--@a1b2c3d4--> b"))
+        self.assertEqual(reflock_engine.normalize("# REF: t.md @2:deadbeef"),
+                         reflock_engine.normalize("# REF: t.md @a1b2c3d4"))
 
 
 if __name__ == "__main__":

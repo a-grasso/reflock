@@ -1,0 +1,24 @@
+{
+  "description": "`stamp --rebless` leaves a pin of an unknown fingerprint version alone rather than silently downgrading it to version 1.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": ["--rebless"],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": ["--json"],
+      "expect_exit": 1,
+      "expect_json": [
+        {
+          "verdict": "UNSUPPORTED",
+          "file": "a.md",
+          "line": 1,
+          "target": "t.md#decision",
+          "detail": "pin @2:deadbeef uses fingerprint version 2; this reflock understands version 1 - upgrade reflock"
+        }
+      ]
+    }
+  ]
+}
