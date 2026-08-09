@@ -196,36 +196,19 @@ per keystroke-adjacent save) - sequence it last.
 
 ---
 
-## 10. Re-blessing a `DRIFTED` reference is one flag away from a rubber stamp *(Near)*
+## ~~10. Re-blessing a `DRIFTED` reference is one flag away from a rubber stamp~~ *(landed - v0.4.0)*
 
-**The scenario:** the whole pitch of the Stop-hook gate (README, "Three
-gates") is that an agent can't declare itself done with references broken.
-But `stamp --rebless` has no such friction: an agent (or a human on autopilot)
-facing a red `check` can run `stamp --rebless` and go green without ever
-reading what changed. That's not a bug in the mechanism - the mechanism did
-exactly what it was asked - but it is a bug in the *gate*, because the whole
-argument for reflock existing is that a DRIFTED verdict corresponds to a real
-"someone should read this" event, and this command lets that event be
-silently discarded.
+Resolved. `stamp --rebless` no longer writes on its own: it lists every pin it
+would re-bless with the old and new fingerprint, says plainly that doing so
+discards the drift signal, points at `reflock explain` for the content, and
+exits nonzero. Writing takes a second, explicit `--reviewed`. The rule is the
+same in a TTY and in CI - a gate that behaves differently under a terminal is
+one people learn to distrust - so an agent facing a red `check` must either
+engage with what changed or fail visibly.
 
-**Why reflock can't do this today:** `--rebless` unconditionally accepts the
-current target state as correct and writes the new hash. There's no diff
-shown, no confirmation required, no distinction between "I read this and it's
-fine" and "I want this error to go away."
-
-**Shape of a solution:** `stamp --rebless` prints, per reference, the
-referencing line/paragraph next to the target unit's current text (a real
-before/after, not just a hash), and requires either an interactive
-accept-per-item prompt (TTY) or an explicit `--reviewed` flag (non-TTY / CI /
-agent) to actually write. Without it, exit nonzero with the diff on stderr -
-forcing an agent to either engage with the content or fail visibly, never to
-silently rubber-stamp.
-
-**Prior art:** [drift](DECISIONS.md#prior-art-under-observation) shipped exactly
-this - re-blessing refuses by default and requires an explicit
-"the doc is still accurate" flag. The single most directly copyable idea from
-watching a live competitor, and it closes a concrete hole in reflock's own
-central claim rather than adding a new capability.
+Kept as a stub rather than deleted because the argument it rests on is the
+central one: a `DRIFTED` verdict is a real "someone should read this" event,
+and any future command that can clear one owes the same friction.
 
 ---
 

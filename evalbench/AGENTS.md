@@ -3,7 +3,7 @@ kind: module
 title: evalbench
 up: ../AGENTS.md
 docs: ./docs
-updated: 2026-07-28
+updated: 2026-08-09
 ---
 
 # evalbench
@@ -32,6 +32,11 @@ scoping) that a unit test against a plain directory can't reach.
 - See this module's `README.md` for fixture anatomy in more detail.
 
 ## Constraints
-- Fixture assertions are stdout-only; a scenario that fails by writing to stderr instead
-  would pass silently — keep this in mind when adding fixtures for new failure modes.
+- Both streams are assertable (`expect_contains` etc. for stdout, `expect_stderr*` for
+  stderr), but a step asserting only one stream says nothing about the other. A contract
+  of the form "this goes to stderr" needs both halves: present on stderr *and* absent
+  from stdout. Prefer `expect_stdout_empty` / `expect_stderr_empty` over a list of
+  words that happen not to appear - an empty-stream claim is about the whole stream.
+- Every invocation runs with `--root <tmp>` *and* `cwd=<tmp>`, so no fixture exercises a
+  root that differs from the working directory.
 </content>

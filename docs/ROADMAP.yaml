@@ -9,8 +9,9 @@
 # Cross-cutting calls the contracts depend on live in roadmap/DECIDED.md.
 #
 # Selection rule for a linear grind: take the FIRST item, in file order, whose
-# status is `ready` and every one of whose blocked_by ids is `done`. File order
-# is therefore the intended sequence, not incidental - reorder deliberately.
+# status is `ready` and every one of whose blocked_by ids appears in `done`.
+# File order is therefore the intended sequence, not incidental - reorder
+# deliberately.
 #
 # owner:
 #   agent  - mechanical and additive; contract states the definition of done
@@ -24,7 +25,10 @@
 #                    can proceed. Agents set this, never clear it.
 #   blocked        - see blocked_by
 #   in-progress    - an agent or branch holds it
-#   done           - shipped; the source entry in NORTHSTARS/IDEAS is deleted
+#
+# A shipped item leaves `items` entirely: its source entry in NORTHSTARS/IDEAS
+# is deleted and its id moves to the `done` list at the foot of this file, so
+# `items` stays the open queue rather than an append-only ledger.
 #
 # Invariant for every item, never restated per-entry: `just test`, `just bench`,
 # `just check` and `just suspects` all pass, and one commit is one item.
@@ -32,548 +36,6 @@
 version: 1
 
 items:
-  # --- agent-ownable, in intended order -------------------------------------
-  - id: BUG-02
-    title: Inline code spans are parsed as live references
-    source: IDEAS.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-02-inline-code-spans.md
-    blocked_by: []
-    touches: [reflock.py]
-    note: >
-      First on purpose: it removes a false-positive class that makes every
-      later contract and README edit harder to write, and the span-masking
-      mechanism it introduces is what NS-02a/NS-02b inherit.
-
-  - id: FMT-01
-    title: One reporting layer behind --format
-    source: roadmap/DECIDED.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/FMT-01-reporting-layer.md
-    blocked_by: []
-    touches: [reflock.py]
-    note: >
-      Pure refactor plus one flag, no output change. Four items depend on it,
-      so it lands before them rather than having each invent its own printing.
-
-  - id: NS-02a
-    title: Reference-style markdown links
-    source: roadmap/NS-02a-reference-style-links.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/NS-02a-reference-style-links.md
-    blocked_by: []
-    touches: [reflock.py]
-    note: >
-      The half of northstar #2 that had no open question - same target string
-      in a different syntactic position. Split out so it was not held up by
-      the wiki-link resolution decision.
-
-  - id: NS-03
-    title: stamp --check (verify without mutating)
-    source: NORTHSTARS.md#3-stamp---check-verify-without-mutating-near
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/NS-03-stamp-check.md
-    blocked_by: []
-    touches: [reflock.py]
-
-  - id: NS-02b
-    title: Wiki-links
-    source: roadmap/NS-02b-wiki-links.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/NS-02b-wiki-links.md
-    blocked_by: [NS-02a]
-    touches: [reflock.py]
-    note: >
-      Sequenced after NS-02a - both touch parse_refs and would conflict on
-      every hunk. Resolution semantics are locked in DECIDED.md D4.
-
-  - id: ID-13
-    title: Quiet/errors-only mode with a one-line summary
-    source: IDEAS.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/ID-13-quiet-mode.md
-    blocked_by: [FMT-01]
-    touches: [reflock.py]
-    note: >
-      Smaller than the IDEAS entry implies - the entry predates --verbose and
-      describes behavior that is already the default. Contract corrects it.
-
-  - id: ID-11
-    title: reflock completion <shell>
-    source: IDEAS.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/ID-11-completion.md
-    blocked_by: []
-    touches: [reflock.py]
-    note: >
-      The IDEAS entry's premise is wrong - argparse cannot generate
-      completions. Hand-written scripts plus a parser-driven parity test.
-
-  - id: ID-15
-    title: reflock backlinks <path>
-    source: IDEAS.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/ID-15-backlinks.md
-    blocked_by: [FMT-01]
-    touches: [reflock.py]
-    note: Read-only query over the existing index; no new grammar.
-
-  - id: ID-10
-    title: "reflock explain <file>:<line>"
-    source: IDEAS.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/ID-10-explain.md
-    blocked_by: [FMT-01]
-    touches: [reflock.py]
-
-  - id: NS-04
-    title: "--format github: CI-native inline annotations"
-    source: NORTHSTARS.md#4-ci-native-output-inline-annotations-not-just-a-log-block-near
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/NS-04-github-format.md
-    blocked_by: [FMT-01, ID-13]
-    touches: [reflock.py]
-
-  - id: ID-21
-    title: pre-commit framework manifest (.pre-commit-hooks.yaml)
-    source: IDEAS.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/ID-21-pre-commit-manifest.md
-    blocked_by: [NS-03]
-    touches: [.pre-commit-hooks.yaml, README.md]
-    note: >-
-      Resolved (a): `language: script` with `entry: reflock.py`, not
-      `language: python` / `entry: reflock`. pre-commit's `language: python`
-      installs the hook repo as a package to obtain a console script, and
-      reflock ships no packaging metadata by design (D3). Both hooks default
-      to `stages: [pre-push]`, which was how D6's "no hook that hard-fails a
-      commit by default" was honored - pre-commit has no warn-only mode.
-      Superseded in part by NS-03b: reflock now has an exit-0 reporting mode,
-      so reflock-stamp-check is genuinely advisory and runs at pre-commit.
-
-  - id: BENCH-01
-    title: evalbench cannot assert stderr or cross-step byte identity
-    source: agent-reported (grind iterations 3, 5, 7, 8)
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BENCH-01-bench-primitives.md
-    blocked_by: []
-    touches: [evalbench/run_bench.py, evalbench/README.md, test_reflock.py,
-              evalbench/fixtures/]
-    note: >-
-      run_bench.py's step schema exposes only expect_json, expect_contains and
-      expect_not_contains, all of which inspect stdout. Two capabilities the
-      contracts keep asking for are therefore unavailable: asserting stderr
-      content or emptiness, and asserting that two steps produced
-      byte-identical stdout. Four shipped items worked around the gap rather
-      than closing it - FMT-01 approximated "identical stdout and exit code
-      with and without --format human" using matching expect_contains
-      snippets; NS-03 approximated "writes nothing" with pin-marker regexes
-      instead of comparing file bytes/mtime across steps; ID-13's contract
-      asks for a summary line "only on stderr" and could only assert that
-      stdout does NOT contain it; NS-04's github-format annotations have the
-      same stream-destination problem. Every one of those assertions is
-      weaker than the contract it claims to satisfy, and a regression that
-      moved output between streams would pass the bench today. Contract also
-      closes a hole found while specifying it: check_step reads assertions
-      with .get(), so an unrecognised key (one typo) is silently ignored and
-      the fixture passes having asserted nothing.
-
-  # --- review of branch grind-near-tier, 2026-07-28 --------------------------
-  # Findings from a multi-dimension review of PR #12. Sequenced so the harness
-  # gap closes first (three of these need assertions it cannot express today)
-  # and the shared resolution bug closes before the items that build on it.
-  - id: BUG-03
-    title: stamp fabricates a pin for targets it cannot hash
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-03-fabricated-pins.md
-    blocked_by: [BENCH-01]
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      plan_stamp() re-derives the target path instead of using
-      resolve_target(), so for an external, outside-tree, directory or binary
-      target it hashes the empty string and writes e3b0c442 into the file.
-      check() returns OK before the hash compare, so it never contradicts the
-      fabricated pin - a silent false negative on the tool's core promise.
-      Fixing it by unifying the two call sites also removes the duplication
-      PR #12 flagged as a review risk.
-
-  - id: BUG-04
-    title: check exits 0 when a path argument matches nothing
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-04-unmatched-scope.md
-    blocked_by: [BENCH-01]
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      scoped_files() prefix-filters the index and yields nothing for an
-      unmatched path, so `reflock check docs/` keeps passing after docs/ is
-      renamed - the exact stale-reference rot reflock exists to catch, in
-      reflock's own CI contract.
-
-  - id: BUG-05
-    title: stamp rewrites bytes it is not stamping
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-05-write-path-fidelity.md
-    blocked_by: [BENCH-01]
-    touches: [reflock.py, test_reflock.py, evalbench/run_bench.py,
-              evalbench/fixtures/]
-    note: >-
-      Two defects in one write path. cmd_stamp round-trips the whole file
-      through universal-newline decoding, so stamping one pin converts every
-      CRLF in the file to LF; and it follows tracked symlinks, so it can
-      modify a file outside the repository with git status showing nothing.
-
-  - id: PERF-01
-    title: check re-hashes the same target unit once per reference
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/PERF-01-fingerprint-memoization.md
-    blocked_by: [BUG-03]
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      400 pinned references to one 4MB file take 56s, all of it in
-      classify(); the module docstring promises "grep, a hashmap lookup and a
-      byte compare". Memoizing on (path, anchor) is the fix. Sequenced after
-      BUG-03 because both rewrite the same resolution path.
-
-  - id: NS-03b
-    title: stamp --check --warn, so the shipped advisory hook is advisory
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/NS-03b-warn-mode.md
-    blocked_by: []
-    touches: [reflock.py, test_reflock.py, .pre-commit-hooks.yaml, README.md,
-              evalbench/fixtures/]
-    note: >-
-      Human-decided 2026-07-28. D6 titles the shipped manifest "advisory" but
-      reflock-stamp-check hard-fails a push, because pre-commit has no
-      warn-only mode and reflock had no exit-0 reporting mode. Adding --warn
-      gives the manifest something genuinely advisory to call, so D6 is
-      satisfied as written rather than amended.
-
-  - id: CLI-01
-    title: backlinks and explain reject path forms check accepts
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/CLI-01-path-forms.md
-    blocked_by: [BENCH-01]
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      Both compare the raw argument against idx.files, so `./docs/t.md` and
-      any cwd-relative path from a subdirectory error out while `check` on the
-      same path works. backlinks also reports zero backlinks for a misspelled
-      #anchor, which its own README paragraph argues is misleading.
-
-  - id: UX-01
-    title: explain dumps the whole target file for a whole-file pin
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/UX-01-explain-unit-truncation.md
-    blocked_by: []
-    touches: [reflock.py, test_reflock.py, README.md, evalbench/fixtures/]
-    note: >-
-      The unit text is the point of `explain` for an anchored reference and
-      unusable for an unanchored one - a pinned reference to a 2000-line
-      design doc prints 2000 lines.
-
-  - id: TEST-01
-    title: the fish completion parity test is satisfied by a comment it forced
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/TEST-01-completion-parity.md
-    blocked_by: []
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      fish spells flags `-l format`, so `--format` appears only in a trailing
-      `# --format` comment that exists to satisfy assertIn. Deleting the
-      comment as cleanup breaks the suite. Same test cannot see that
-      positional choices (completion's shell argument) are never completed,
-      and there is no fish syntax check where bash and zsh both have one.
-
-  - id: BUG-06
-    title: suspects scans inside inline code spans
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-06-suspects-code-spans.md
-    blocked_by: []
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      BUG-02 exempted code spans from reference parsing per D2; cmd_suspects
-      still scans raw lines, so a path named in backticks in prose is a
-      suspect. Strictly fewer false positives, which is D2's own rationale.
-
-  - id: BUG-07
-    title: usage errors ignore --format/--json
-    source: AXI adoption review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-07-error-format-leak.md
-    blocked_by: []
-    touches: [reflock_lib/commands.py, reflock_lib/cli.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      Every usage error printed plain text to stderr regardless of --format,
-      so a caller that asked for --format json/github got nothing structured
-      on stdout when a command failed. render_error() is the error-path
-      counterpart to the existing RENDERERS table (D1); ScopeError is now
-      caught inside each command that can raise it instead of once in
-      cli.py:main, so the catch site knows the command's resolved format.
-
-  - id: UX-02
-    title: backlinks human output has no total count
-    source: AXI adoption review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/UX-02-backlinks-count-line.md
-    blocked_by: []
-    touches: [reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      check/stamp --check/suspects all end human output with a trailing
-      count line; backlinks was the one inconsistency. Additive-only -
-      render_backlinks_json is untouched, D1's JSON-shape lock is not
-      revisited.
-
-  - id: UX-03
-    title: check and stamp --check report problems with no next step
-    source: AXI adoption review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/UX-03-next-step-hints.md
-    blocked_by: []
-    touches: [reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      Human output only, and only when there is a problem to act on - a clean
-      tree or an empty stamp --check report stays self-contained. json/github
-      shapes are untouched (D1). suspects and plain stamp were considered and
-      excluded: neither has a single unambiguous fix command to suggest.
-
-  - id: CLI-02
-    title: subcommand --help has no usage examples
-    source: AXI adoption review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/CLI-02-help-epilogs.md
-    blocked_by: []
-    touches: [reflock_lib/cli.py, test_reflock.py]
-    note: >-
-      Each subcommand's --help gains an "examples:" epilog section via
-      RawDescriptionHelpFormatter. Help text only - no flag, renderer, or
-      parser_spec()/completion change.
-
-  - id: CLI-03
-    title: bare reflock shows usage instead of live state
-    source: AXI adoption review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/CLI-03-bare-invocation-defaults-to-check.md
-    blocked_by: []
-    touches: [reflock_lib/cli.py, test_reflock.py]
-    note: >-
-      Fully empty argv now delegates to `check` before argparse ever sees a
-      missing-subcommand error. Scoped tightly: --root with no subcommand
-      still errors, and no other subcommand becomes implicit.
-
-  - id: ID-22
-    title: reflock setup claude
-    source: AXI adoption review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/ID-22-setup-claude-subcommand.md
-    blocked_by: []
-    touches: [reflock_lib/setup.py, reflock_lib/cli.py, test_reflock.py]
-    note: >-
-      Promotes examples/hooks/reflock-gate.sh from copy-paste material to an
-      idempotent, path-repairing setup command. SessionStart dashboards and
-      Codex/OpenCode support explicitly excluded - no existing integration
-      to promote for either.
-
-  - id: DOC-01
-    title: the documented pre-commit rev names a tag without the manifest
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/DOC-01-precommit-rev.md
-    blocked_by: [NS-03b]
-    touches: [README.md, reflock.py, test_reflock.py,
-              .github/workflows/release.yml]
-    note: >-
-      README pins `rev: v0.1.0`; .pre-commit-hooks.yaml exists in no tag
-      (v0.1.0..v0.1.4) nor on main, so the documented config fails with
-      InvalidManifestError. Human-decided 2026-07-28: bump to 0.1.5 and point
-      the README at v0.1.5; the tag itself is cut by a human after merge.
-      Sequenced after NS-03b because that item changes which entry the
-      manifest calls.
-
-  - id: NIT-01
-    title: review nits - wrong annotation, unordered refs on a line
-    source: review 2026-07-28
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/NIT-01-review-nits.md
-    blocked_by: [BUG-03, CLI-01, UX-01]
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      Two leftovers too small for their own items: unit_text is annotated
-      `str | list | None` but never returns a list, and parse_refs appends
-      per-pattern so refs on one line are not in column order - explain sorts
-      them, check does not. Last so it cannot conflict with the items above.
-
-  # --- done ------------------------------------------------------------------
-  - id: BUG-01
-    title: slugify treats link syntax inside a heading code span as a link
-    source: roadmap/BUG-01-slugify-code-span.md
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-01-slugify-code-span.md
-    blocked_by: []
-    touches: [reflock.py, test_reflock.py, evalbench/fixtures/]
-    note: >
-      Same class as closed issue #4 - a slug that diverged from GitHub's,
-      producing a false DANGLING. Found by dogfooding this queue.
-
-  # --- suspects precision, from the dogfooding on a large private repo run 2026-07-30 -------
-  # `suspects --all` on a real repo returned 200 findings of which ~4 were real.
-  # Sequenced by signal recovered per unit of work; BUG-12 is last because it is
-  # the only one that withdraws a claim rather than fixing a slip.
-  - id: BUG-08
-    title: URL path segments are reported as suspects
-    source: dogfooding on a large private repo 2026-07-30
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-08-suspects-url-segments.md
-    blocked_by: []
-    touches: [reflock_lib/grammar.py, reflock_lib/engine.py, reflock_lib/commands.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      PATHISH excluded URLs only by accident of its lookbehind; an `@` in an npm
-      scope re-opens a match mid-URL. Three-quarters of one repo's 200 findings.
-      Fixed by masking URLs like code spans, not by widening the lookbehind.
-
-  - id: BUG-09
-    title: shell variables and `.../` elisions are matched as paths
-    source: dogfooding on a large private repo 2026-07-30
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-09-suspects-shell-vars-and-elision.md
-    blocked_by: []
-    touches: [reflock_lib/grammar.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      `$scriptDir/...` reported the variable name as a directory; `a/.../b.kt`
-      reported a human's elision placeholder. Both are grammar-level: neither
-      shape is path-shaped.
-
-  - id: BUG-10
-    title: suspects prints a truncated path that appears nowhere in the source
-    source: dogfooding on a large private repo 2026-07-30
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-10-suspects-truncated-extension.md
-    blocked_by: []
-    touches: [reflock_lib/grammar.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      The extension cap silently truncated rather than rejecting, so
-      `maven-wrapper.properties` was reported as `maven-wrapper.proper` - a
-      string nobody wrote, asserted not to resolve. Match whole or not at all.
-
-  - id: BUG-11
-    title: suspects scans lockfiles, wrappers and ignore files
-    source: dogfooding on a large private repo 2026-07-30
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-11-suspects-vendored-sources.md
-    blocked_by: []
-    touches: [reflock_lib/engine.py, reflock_lib/commands.py, README.md, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      .reflockignore already covers this but requires every consumer to
-      rediscover it. A built-in skip list for never-authored sources, scoped to
-      `suspects` only so the gate `check` applies does not shrink.
-
-  - id: BUG-12
-    title: a bare path has no single base to resolve against
-    source: dogfooding on a large private repo 2026-07-30
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-12-suspects-relative-base.md
-    blocked_by: []
-    touches: [reflock_lib/engine.py, reflock_lib/commands.py, README.md, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      Runtime artifacts like `../data/crm.db` escaped the gitignore pass because
-      the probe got the wrong candidate. Adds the root-relative reading plus D4-
-      style tail resolution. The recipe-working-directory case stays out of
-      reach by design and is documented as such.
-
-  - id: BUG-13
-    title: a hyphen re-opens a match mid-path
-    source: dogfooding on a large private repo 2026-07-30
-    tier: near
-    owner: agent
-    status: done
-    contract: roadmap/BUG-13-suspects-hyphen-restart.md
-    blocked_by: []
-    touches: [reflock_lib/grammar.py, test_reflock.py, evalbench/fixtures/]
-    note: >-
-      Found verifying BUG-08..12 on the repo that produced them:
-      `{{ dir }}/dist-share/index.html` reported `share/index.html`. BUG-08's
-      defect with a different character - the rule it missed is that no match
-      may begin at a character the segment class would have consumed. Now
-      stated as a rule in the pattern, with a per-character test.
-
   # --- human-owned: design decisions ----------------------------------------
   # Listed so the orchestrator can see them and skip them, not to schedule them.
   - id: NS-01
@@ -584,27 +46,6 @@ items:
     status: blocked
     blocked_by: [design]
     note: Carries "do this first" in the prose. Sequencing call, not agent work.
-
-  - id: NS-11
-    title: Stamp format has no version tag
-    source: NORTHSTARS.md
-    tier: near
-    owner: human
-    status: blocked
-    blocked_by: [design]
-    note: >
-      Near, but it is a published wire format. Decide before wide adoption.
-      NS-02a and NS-02b both widen what gets stamped, so either land them
-      first or re-stamp after this.
-
-  - id: NS-10
-    title: Re-blessing a DRIFTED reference is one flag from a rubber stamp
-    source: NORTHSTARS.md
-    tier: near
-    owner: human
-    status: blocked
-    blocked_by: [design]
-    note: Policy question about trust, not a mechanical gap.
 
   - id: ID-12
     title: A config file (reflock.toml / .reflock.yml)
@@ -674,3 +115,45 @@ items:
     owner: human
     status: blocked
     blocked_by: [design]
+
+# Shipped. Ids only: the contract for <id> is roadmap/<id>-*.md, and git holds
+# the entry as it stood. Kept so `blocked_by` ids stay resolvable.
+done:
+  - BUG-02
+  - FMT-01
+  - NS-02a
+  - NS-03
+  - NS-02b
+  - ID-13
+  - ID-11
+  - ID-15
+  - ID-10
+  - NS-04
+  - ID-21
+  - BENCH-01
+  - BUG-03
+  - BUG-04
+  - BUG-05
+  - PERF-01
+  - NS-03b
+  - CLI-01
+  - UX-01
+  - TEST-01
+  - BUG-06
+  - BUG-07
+  - UX-02
+  - UX-03
+  - CLI-02
+  - CLI-03
+  - ID-22
+  - DOC-01
+  - NIT-01
+  - BUG-01
+  - BUG-08
+  - BUG-09
+  - BUG-10
+  - BUG-11
+  - BUG-12
+  - BUG-13
+  - NS-11
+  - NS-10
