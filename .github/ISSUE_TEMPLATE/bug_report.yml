@@ -1,0 +1,38 @@
+name: Bug report
+description: reflock reported something wrong, or stayed quiet when it shouldn't have
+labels: [bug]
+body:
+  - type: textarea
+    id: reference
+    attributes:
+      label: The reference
+      description: The line as written, plus the file it lives in and the target it points at.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what you got
+      description: Paste the reflock output. `reflock explain <file>:<line>` output helps a lot.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `reflock --version`.
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python3 --version`.
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Fixture (optional, and very welcome)
+      description: >
+        A directory under `evalbench/fixtures/` reproducing this is the fastest
+        path to a fix - see CONTRIBUTING.md.

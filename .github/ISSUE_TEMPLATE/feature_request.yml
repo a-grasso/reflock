@@ -1,0 +1,22 @@
+name: Feature request
+description: Something reflock should be able to do and can't
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Please skim [DECISIONS.md](../../DECISIONS.md) and
+        [NORTHSTARS.md](../../NORTHSTARS.md) first - a fair amount has already
+        been considered, and some of it was deliberately rejected.
+  - type: textarea
+    id: scenario
+    attributes:
+      label: The scenario that forced this
+      description: A real reference in a real tree that reflock handles badly. Concrete beats abstract.
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: Rough shape of a fix
+      description: Optional. How would this work without adding a dependency or a model to the hot path?
