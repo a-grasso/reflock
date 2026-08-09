@@ -22,9 +22,11 @@ gate: test bench check
 # (GitHub release + Homebrew tap formula). Usage: just release 0.1.7
 release version:
     python3 -c "import re; p='reflock_lib/__init__.py'; s=open(p).read(); open(p,'w').write(re.sub(r'__version__ = \".*\"', '__version__ = \"{{version}}\"', s))"
-    python3 -c "import re; p='README.md'; s=open(p).read(); open(p,'w').write(re.sub(r'rev: v[0-9.]+', 'rev: v{{version}}', s))"
+    # README.md and docs/*.md only - docs/roadmap/ and docs/adr/ are historical
+    # records, and DOC-01 quotes an old rev *as the bug it documents*.
+    python3 -c "import re,glob; [open(p,'w').write(re.sub(r'rev: v[0-9.]+', 'rev: v{{version}}', open(p).read())) for p in ['README.md'] + glob.glob('docs/*.md')]"
     just gate
-    git add reflock_lib/__init__.py README.md
+    git add reflock_lib/__init__.py README.md docs
     git commit -m "Bump version to {{version}}"
     git push origin main
     git tag -a v{{version}} -m v{{version}}
