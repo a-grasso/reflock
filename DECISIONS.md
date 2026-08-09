@@ -3,7 +3,7 @@
 Standing design choices: what reflock does, the alternative it rejected, and
 the evidence. This is the opposite kind of entry from its two siblings -
 [NORTHSTARS.md](NORTHSTARS.md) is capabilities reflock lacks and will need,
-[IDEAS.md](IDEAS.md) is the wider brainstorm feeding it, and both are lists of
+[IDEAS.md](docs/IDEAS.md) is the wider brainstorm feeding it, and both are lists of
 things to *build*. A decision here is a question that's settled: it says what
 not to build and why, so the same alternative doesn't get re-proposed every
 six months.
