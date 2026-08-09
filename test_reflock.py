@@ -2635,6 +2635,11 @@ class VersionConsistencyTest(unittest.TestCase):
             top = rel.split(os.sep)[0]
             self.assertIn(top, recipe,
                           f"{rel} quotes a rev: that `just release` never rewrites")
+        # Opening a file for write inside the expression that reads it truncates
+        # it before the read runs, emptying it. That shipped once and blanked the
+        # README mid-release, so the spelling itself is asserted against.
+        self.assertNotIn("open(p, 'w')", recipe.replace("open(p,'w')", "open(p, 'w')"),
+                         "the release recipe must read a file fully before writing it")
 
     def test_version_flag_prints_the_module_version(self):
         buf = io.StringIO()
