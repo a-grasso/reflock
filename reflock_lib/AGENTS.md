@@ -33,7 +33,7 @@ package.
 - `cli.py` — argument parsing, shell completion generation, main entry point.
 
 ## Navigation (for agents)
-- Follow **`up:`** for project-wide conventions, `make` targets, and the full module map.
+- Follow **`up:`** for project-wide conventions, `just` recipes, and the full module map.
 - Follow **`dep:`** for the GitHub Actions annotation syntax the `github` renderer targets.
 
 ## Constraints

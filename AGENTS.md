@@ -6,7 +6,7 @@ ref:
   - { at: reflock_lib/AGENTS.md, hint: core engine, grammar, CLI, and output renderers }
   - { at: evalbench/AGENTS.md, hint: black-box eval harness running reflock as a subprocess }
 docs: ./docs
-updated: 2026-07-28
+updated: 2026-08-09
 ---
 
 # reflock
@@ -22,8 +22,8 @@ Distributes as a single dependency-free Python file (stdlib only).
 - **Test:** `just test` (`python3 -m unittest -v test_reflock`)
 - **Bench:** `just bench` (`python3 evalbench/run_bench.py`)
 - **Gate (all of the above except suspects):** `just gate`
-- **Release:** `just release X.Y.Z` - bumps `__version__` and the README pre-commit
-  `rev:` pin, gates, commits, tags, and pushes. `.github/workflows/release.yml` takes it
+- **Release:** `just release X.Y.Z` - bumps `__version__` and the pre-commit `rev:` pin
+  in `README.md` and `docs/*.md`, gates, commits, tags, and pushes. `.github/workflows/release.yml` takes it
   from there: GitHub release + Homebrew tap formula (see its header comment).
 - **Conventions:** stdlib-only Python; no runtime dependencies. `install.sh` symlinks
   `reflock.py` onto PATH, so the single-file entry point must keep working from any
@@ -36,14 +36,21 @@ Distributes as a single dependency-free Python file (stdlib only).
   distribution story.
 - `test_reflock.py` — unit tests against `reflock_lib` (root-level so `just test` stays a
   one-liner; not a module of its own).
-- `roadmap/` — per-feature specs and bug writeups (`BUG-*`, `ID-*`, `NS-*`, ...) plus
-  `DECIDED.md`. Working documents feeding `DECISIONS.md`/`NORTHSTARS.md`, not a code module.
+- `docs/manual.md` — the user-facing reference: every command, flag, exit code and gate.
+  `README.md` is the landing page and links into it; keep the two from drifting.
+- `docs/roadmap/` — per-feature specs and bug writeups (`BUG-*`, `ID-*`, `NS-*`, `PUB-*`,
+  ...) plus `DECIDED.md`. Working documents feeding `DECISIONS.md`/`NORTHSTARS.md`, not a
+  code module. Historical records: they quote the state of the world when written (DOC-01
+  quotes an old `rev:` deliberately), so release automation must never rewrite them.
+- `docs/ROADMAP.yaml`, `docs/IDEAS.md` — the prioritized backlog and the wider brainstorm.
 - `examples/` — hook and skill snippets for consumers integrating reflock (pre-commit,
   Claude Code skill).
 - `docs/adr/` — architecture decisions.
-- `docs/decisions/` — smaller decision log (see also root `DECISIONS.md` and
-  `NORTHSTARS.md`, which predate this doc structure and remain authoritative for design
-  rationale).
+- `DECISIONS.md`, `NORTHSTARS.md` — standing design rationale and named gaps. They predate
+  `docs/adr/` and remain authoritative; both are linked from the README, which is why they
+  stay at the root rather than moving under `docs/`.
+- `CONTRIBUTING.md`, `SECURITY.md`, `.github/` — the public-repo surface: CI, release
+  automation, issue and PR templates, funding.
 
 ## Navigation (for agents)
 - Follow **`ref:`** to enter a module. Read that module's `AGENTS.md` before editing it.

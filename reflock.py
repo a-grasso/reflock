@@ -13,7 +13,7 @@ the hot path — everything here is grep, a hashmap lookup, and a byte compare.
 Reference surface forms
 -----------------------
   Markdown link (optionally pinned):
-      [text](relative/path.md#anchor)<!--@a1b2c3d4-->
+      [text](relative/path.md#anchor)<!--@a1b2c3d4-->   # bare hex == version 1
       [text](relative/path.md#anchor)<!--@-->        # opt-in, not yet stamped
       [text](relative/path.md#anchor).<!--@a1b2c3d4-->  # sentence punctuation
                                                         # before the pin is fine
@@ -33,12 +33,18 @@ Verdicts
   DANGLING    path / anchor / span does not resolve
   DRIFTED     resolves, but the target changed since the pin was blessed
   UNSTAMPED   opted into pinning (`@`) but never stamped
+  UNSUPPORTED pin written under a fingerprint version this reflock doesn't know
 
 Commands
 --------
   reflock check     [paths...]     report; exit 1 on any problem
-  reflock stamp     [paths...]     fill empty pins (--rebless: re-hash all)
+  reflock stamp     [paths...]     fill empty pins
+                                   (--rebless --reviewed: re-hash existing ones)
   reflock suspects  [paths...]     path-shaped prose that doesn't resolve
+  reflock backlinks <path>         what points at this file
+  reflock explain   <file>:<line>  everything about one reference
+  reflock completion <shell>       print a completion script
+  reflock setup     claude         install/repair the agent Stop hook
 
 This file is the single executable entry point (install.sh symlinks it onto
 PATH, and the pre-commit manifest invokes it directly as a script); the
