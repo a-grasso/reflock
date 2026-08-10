@@ -113,3 +113,58 @@ correctly `DANGLING` and will block a commit a human considers reasonable.
 So the shipped `.pre-commit-hooks.yaml` offers `check` plus the advisory
 `stamp --check`, and the README points teams at pre-push for enforcement. Do not
 ship a hook that hard-fails a commit by default.
+
+## D7. The machine-readable output envelope
+
+Every JSON emitter wraps its payload in one object. Never a bare array, never a
+different top-level type on the error path.
+
+```json
+{ "schema": 1, "reflock": "0.4.0", "command": "check", "root": "/abs/path",
+  "findings": [], "summary": {}, "problems": 0 }
+```
+
+- `schema` is an integer, emitted and never negotiated. **Additive changes do
+  not bump it**; removing or repurposing a key does. That asymmetry is the point
+  of having it - it buys the freedom to add fields later without a flag day.
+- `findings` is always present and always an array, including when `error` is
+  set. A consumer must never have to type-switch on the top level, and the naive
+  `for f in json.load(fh)` must not silently iterate a string.
+- `error` is `{"kind": ..., "message": ...}` with `kind` a closed vocabulary.
+  The message is prose (see D8); `kind` is what a caller branches on.
+- Emitters affected: `check`, `stamp`, `explain`, `backlinks`, `suspects --json`.
+  Per D1 that is one renderer, so this is one change in one place.
+
+**Why now rather than after adoption:** the stamp *wire* format is versioned
+(`FP_VERSION`, and `UNSUPPORTED` exists to announce a version reflock cannot
+read) while the *output* format is not. The asymmetry is not principled - it is
+that nobody wrote it down - and every day it ships, the eventual fix costs more.
+
+**Accepted cost:** this is a breaking change to `--format json` for anyone
+already scripting against the bare array. Taken once, deliberately, before the
+surface is announced, rather than apologised for later.
+
+## D8. `detail` is prose, `reason` is vocabulary
+
+Findings carry both. `detail` is a human sentence and reflock may reword it in
+any release. `reason` is a closed vocabulary derived from the branch that
+produced the verdict, and changing a member is breaking.
+
+```json
+{ "verdict": "DANGLING", "reason": "no-such-anchor",
+  "detail": "no anchor '#gone' in b.md" }
+```
+
+- A `reason` must be derived from control flow, not by parsing `detail`. If the
+  two can disagree, the vocabulary is decoration.
+- Structured operands (`pinned`, `current`, `candidates`, ...) appear only on
+  the verdicts that define them. Absence is a signal; do not emit nulls.
+
+**Why both:** the human report is read by people *and* by the model behind a
+Stop hook, where a fluent sentence outperforms an enum. The JSON is read by
+code, where an enum is the only honest option. Collapsing them either freezes
+prose or forces machines to regex it - reflock currently does the latter, which
+is how a wording fix becomes an outage for someone.
+
+**Consequence for AGT-03:** `detail` is explicitly outside the stability
+contract. Say so in the manual rather than leaving it implied.

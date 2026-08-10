@@ -36,6 +36,59 @@
 version: 1
 
 items:
+  # --- agent-owned: the agent-facing surface --------------------------------
+  # Contracts in roadmap/AGT-*.md; cross-cutting calls in roadmap/DECIDED.md
+  # (D7, D8). AGT-01 is first deliberately: it is the only breaking change in
+  # the set, and every item after it is additive because it landed.
+  - id: AGT-01
+    title: A versioned envelope for machine-readable output
+    source: roadmap/AGT-01-json-envelope.md
+    tier: near
+    owner: agent
+    status: ready
+    note: >
+      Breaking change to `--format json`. Ship before the surface is announced,
+      not after - the whole cost of this item is paid by whoever scripts against
+      the bare array first.
+
+  - id: AGT-02
+    title: Findings carry structure, not just prose
+    source: roadmap/AGT-02-structured-finding-detail.md
+    tier: near
+    owner: agent
+    status: blocked
+    blocked_by: [AGT-01]
+
+  - id: AGT-04
+    title: The Stop hook must not send an agent to repair a config error
+    source: roadmap/AGT-04-stop-hook-honors-exit-2.md
+    tier: near
+    owner: agent
+    status: ready
+    note: >
+      Live bug in shipped example code - exit 2 is reported to the agent as
+      broken references. Independent of the JSON items; can go first or last.
+
+  - id: AGT-05
+    title: stamp --check --format json
+    source: roadmap/AGT-05-stamp-check-format-json.md
+    tier: near
+    owner: agent
+    status: blocked
+    blocked_by: [AGT-01]
+
+  - id: AGT-03
+    title: Say what is stable
+    source: roadmap/AGT-03-output-stability-contract.md
+    tier: near
+    owner: agent
+    status: blocked
+    blocked_by: [AGT-01, AGT-02]
+    note: >
+      Docs only, and last on purpose: it documents tested behavior, so it must
+      follow the items whose fixtures back its claims. AGT-05 need not precede
+      it - a later command joining the contract is additive.
+
   # --- human-owned: design decisions ----------------------------------------
   # Listed so the orchestrator can see them and skip them, not to schedule them.
   - id: NS-01
