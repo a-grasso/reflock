@@ -1,0 +1,32 @@
+{
+  "description": "AGT-01: an error carries the same envelope - findings is still an array, so a consumer never type-switches",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json",
+        "nope.md"
+      ],
+      "expect_exit": 2,
+      "expect_stderr_empty": true,
+      "expect_json_subset": {
+        "schema": 1,
+        "command": "check",
+        "findings": [],
+        "summary": {
+          "OK": 0,
+          "DANGLING": 0,
+          "DRIFTED": 0,
+          "UNSTAMPED": 0,
+          "UNSUPPORTED": 0
+        },
+        "problems": 0,
+        "error": {
+          "kind": "scope",
+          "message": "no such path in tree: nope.md"
+        }
+      }
+    }
+  ]
+}

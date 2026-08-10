@@ -3,37 +3,47 @@
   "steps": [
     {
       "cmd": "check",
-      "args": ["--verbose", "--json"],
+      "args": [
+        "--verbose",
+        "--json"
+      ],
       "expect_exit": 0,
-      "expect_json": [
-        {
-          "verdict": "OK",
-          "file": "a.md",
-          "line": 1,
-          "target": "wiki",
-          "detail": "unpinned"
-        },
-        {
-          "verdict": "OK",
-          "file": "a.md",
-          "line": 1,
-          "target": "t.md",
-          "detail": "unpinned"
-        },
-        {
-          "verdict": "OK",
-          "file": "a.md",
-          "line": 1,
-          "target": "t.md",
-          "detail": "unpinned"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "OK",
+            "file": "a.md",
+            "line": 1,
+            "target": "wiki",
+            "detail": "unpinned"
+          },
+          {
+            "verdict": "OK",
+            "file": "a.md",
+            "line": 1,
+            "target": "t.md",
+            "detail": "unpinned"
+          },
+          {
+            "verdict": "OK",
+            "file": "a.md",
+            "line": 1,
+            "target": "t.md",
+            "detail": "unpinned"
+          }
+        ]
+      }
     },
     {
       "cmd": "explain",
-      "args": ["a.md:1"],
+      "args": [
+        "a.md:1"
+      ],
       "expect_exit": 0,
-      "expect_contains": ["resolves to wiki.md", "resolves to t.md"]
+      "expect_contains": [
+        "resolves to wiki.md",
+        "resolves to t.md"
+      ]
     }
   ]
 }

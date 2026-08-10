@@ -8,15 +8,17 @@
         "--verbose"
       ],
       "expect_exit": 0,
-      "expect_json": [
-        {
-          "verdict": "OK",
-          "file": "a.md",
-          "line": 1,
-          "target": "assets",
-          "detail": "dir"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "OK",
+            "file": "a.md",
+            "line": 1,
+            "target": "assets",
+            "detail": "dir"
+          }
+        ]
+      }
     }
   ]
 }

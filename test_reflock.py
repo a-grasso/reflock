@@ -67,7 +67,20 @@ class ReflockTest(unittest.TestCase):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = reflock.main(["--root", self.d, "check", "--json", *args])
-        return rc, json.loads(buf.getvalue())
+        return rc, self.findings(buf.getvalue())
+
+    def findings(self, out):
+        """The findings array, having asserted the envelope around it (AGT-01).
+
+        Every JSON-reading test goes through here, so the envelope invariants
+        are checked on every one of them rather than in a single test that
+        could pass while the rest of the surface regressed."""
+        env = json.loads(out)
+        self.assertIsInstance(env, dict)
+        self.assertEqual(reflock.SCHEMA, env["schema"])
+        self.assertEqual(reflock.__version__, env["reflock"])
+        self.assertIsInstance(env["findings"], list)
+        return env["findings"]
 
     # --- structural (Level 1) --------------------------------------------
     def test_dangling_file(self):
@@ -639,7 +652,7 @@ class ReflockTest(unittest.TestCase):
         check_order = [f["target"] for f in findings
                        if f["file"] == "a.md" and f["line"] == 1]
         _, out, _ = self.run_cmd("explain", "a.md:1", "--format", "json")
-        self.assertEqual(check_order, [e["target"] for e in json.loads(out)])
+        self.assertEqual(check_order, [e["target"] for e in self.findings(out)])
 
     def test_mixed_line_reference_count_and_verdicts_unchanged(self):
         self.write("wiki.md", "# Wiki\n")
@@ -657,7 +670,7 @@ class ReflockTest(unittest.TestCase):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             reflock.main(["--root", self.d, "suspects", "--json", *args])
-        return [h["target"] for h in json.loads(buf.getvalue())]
+        return [h["target"] for h in self.findings(buf.getvalue())]
 
     def test_suspects_ignores_path_in_code_span(self):
         self.write("a.md", "Older builds wrote to `build/legacy/out.json` once.\n")
@@ -809,7 +822,7 @@ class ReflockTest(unittest.TestCase):
             rc = reflock.main(["--root", self.d, "suspects", "--all", "--json",
                                os.path.join(self.d, "package-lock.json")])
         self.assertEqual(0, rc)
-        self.assertEqual([], json.loads(buf.getvalue()))
+        self.assertEqual([], self.findings(buf.getvalue()))
 
     # --- BUG-12: a bare path has no single base to resolve against -----------
     def git_init(self, *tracked):
@@ -1023,14 +1036,14 @@ class ReflockTest(unittest.TestCase):
         rc, out, err = self.run_cmd("backlinks", "docs/nope.md", "--format", "json")
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("nope.md", json.loads(out)["error"])
+        self.assertIn("nope.md", json.loads(out)["error"]["message"])
 
     def test_backlinks_format_json_unknown_anchor_goes_to_stdout(self):
         self.setup_docs_tree()
         rc, out, err = self.run_cmd("backlinks", "docs/t.md#no-such-anchor", "--format", "json")
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("no-such-anchor", json.loads(out)["error"])
+        self.assertIn("no-such-anchor", json.loads(out)["error"]["message"])
 
     def test_repo_relative_path_works_from_a_subdirectory(self):
         """check prints repo-relative paths whatever directory it runs in, so
@@ -1510,7 +1523,7 @@ class ReflockTest(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             rc = reflock.main(["--root", self.d, "suspects", "--json"])
         self.assertEqual(rc, 1)
-        hits = json.loads(buf.getvalue())
+        hits = self.findings(buf.getvalue())
         self.assertEqual(hits, [{"file": "a.md", "line": 1, "target": "platform/research.sh"}])
 
     def test_suspects_all_flag_scans_code_files(self):
@@ -1523,7 +1536,7 @@ class ReflockTest(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             rc = reflock.main(["--root", self.d, "suspects", "--all", "--json"])
         self.assertEqual(rc, 1)
-        self.assertEqual(json.loads(buf.getvalue()),
+        self.assertEqual(self.findings(buf.getvalue()),
                           [{"file": "lib.py", "line": 1, "target": "other/module.py"}])
 
     # --- ignore semantics --------------------------------------------------
@@ -1646,6 +1659,91 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(reflock.GITHUB_LEVEL["UNSTAMPED"], "warning")
         self.assertNotIn("OK", reflock.GITHUB_LEVEL)
 
+    # --- AGT-01: the machine-readable output envelope ------------------------
+    def envelope_of(self, *argv):
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, *argv])
+        return rc, json.loads(buf.getvalue()), err.getvalue()
+
+    def test_envelope_findings_is_a_list_on_every_exit_path(self):
+        """The regression that matters: a consumer must never have to
+        type-switch on the top level, so the shape cannot depend on whether the
+        run was clean, found problems, or failed outright."""
+        self.write("t.md", "# T\n")
+        clean_rc, clean, _ = self.envelope_of("check", "--format", "json")
+        self.write("a.md", "See [x](missing.md).\n")
+        prob_rc, prob, _ = self.envelope_of("check", "--format", "json")
+        err_rc, err_env, _ = self.envelope_of("check", "--format", "json", "nope.md")
+        self.assertEqual((0, 1, 2), (clean_rc, prob_rc, err_rc))
+        for env in (clean, prob, err_env):
+            self.assertIsInstance(env, dict)
+            self.assertIsInstance(env["findings"], list)
+        self.assertEqual([], err_env["findings"])
+        self.assertEqual("scope", err_env["error"]["kind"])
+
+    def test_envelope_summary_carries_every_verdict_key(self):
+        """Zeros included, so `summary["DRIFTED"] > 0` never needs a default."""
+        self.write("a.md", "See [x](missing.md).\n")
+        _, env, _ = self.envelope_of("check", "--format", "json")
+        self.assertEqual(set(reflock.VERDICTS), set(env["summary"]))
+        self.assertEqual(1, env["summary"]["DANGLING"])
+        self.assertEqual(0, env["summary"]["DRIFTED"])
+
+    def test_envelope_summary_counts_the_findings_beside_it(self):
+        """A summary that disagreed with the array it ships with would be worse
+        than none, so it counts findings rather than every reference scanned."""
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [t](t.md) and [x](missing.md).\n")
+        _, env, _ = self.envelope_of("check", "--format", "json", "--verbose")
+        self.assertEqual(len(env["findings"]), sum(env["summary"].values()))
+        self.assertEqual(1, env["summary"]["OK"])
+
+    def test_envelope_problems_agrees_with_the_exit_code(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [t](t.md) and [x](missing.md).\n")
+        rc, env, _ = self.envelope_of("check", "--format", "json", "--verbose")
+        non_ok = [f for f in env["findings"] if f["verdict"] != "OK"]
+        self.assertEqual(len(non_ok), env["problems"])
+        self.assertEqual(1 if env["problems"] else 0, rc)
+
+    def test_envelope_reports_the_running_version_and_schema(self):
+        self.write("t.md", "# T\n")
+        _, env, _ = self.envelope_of("check", "--format", "json")
+        self.assertEqual(reflock.__version__, env["reflock"])
+        self.assertEqual(1, env["schema"])
+
+    def test_envelope_error_kinds_are_the_documented_vocabulary(self):
+        """`kind` is what a caller branches on, so an unlisted value is a bug
+        even when the message reads fine (D8)."""
+        self.write("a.md", "See [x](missing.md).\n")
+        _, scope_env, _ = self.envelope_of("check", "--format", "json", "nope.md")
+        _, usage_env, _ = self.envelope_of("check", "--format", "json", "--quiet", "--verbose")
+        self.assertEqual("scope", scope_env["error"]["kind"])
+        self.assertEqual("usage", usage_env["error"]["kind"])
+        for env in (scope_env, usage_env):
+            self.assertIn(env["error"]["kind"], reflock.ERROR_KINDS)
+
+    def test_envelope_command_names_the_subcommand(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [t](t.md).\n")
+        for argv, want in ((["check", "--format", "json"], "check"),
+                           (["backlinks", "t.md", "--format", "json"], "backlinks"),
+                           (["explain", "a.md:1", "--format", "json"], "explain"),
+                           (["suspects", "--json"], "suspects")):
+            with self.subTest(command=want):
+                _, env, _ = self.envelope_of(*argv)
+                self.assertEqual(want, env["command"])
+
+    def test_envelope_quiet_json_keeps_the_whole_envelope(self):
+        """-q is quiet for humans, not less JSON."""
+        self.write("a.md", "See [x](missing.md).\n")
+        rc, env, err = self.envelope_of("check", "-q", "--format", "json")
+        self.assertEqual(1, rc)
+        self.assertEqual("", err)
+        self.assertEqual(1, env["problems"])
+        self.assertEqual(1, len(env["findings"]))
+
     # --- BUG-07: usage errors respect --format ------------------------------
     def render_error(self, message, fmt):
         out, err = io.StringIO(), io.StringIO()
@@ -1653,10 +1751,16 @@ class ReflockTest(unittest.TestCase):
             reflock.render_error(message, fmt)
         return out.getvalue(), err.getvalue()
 
-    def test_render_error_json_prints_object_to_stdout(self):
+    def test_render_error_json_prints_envelope_to_stdout(self):
+        """The error path carries the same envelope as the success path
+        (AGT-01): `findings` is an array here too, so a consumer that never
+        wrote a type check still parses this without surprises."""
         out, err = self.render_error("no such path in tree: x", "json")
         self.assertEqual("", err)
-        self.assertEqual({"error": "no such path in tree: x"}, json.loads(out))
+        env = json.loads(out)
+        self.assertEqual([], env["findings"])
+        self.assertEqual({"kind": "usage", "message": "no such path in tree: x"},
+                          env["error"])
 
     def test_render_error_github_prints_annotation_to_stdout(self):
         out, err = self.render_error("no such path in tree: x", "github")
@@ -1677,7 +1781,7 @@ class ReflockTest(unittest.TestCase):
         rc, out, err = self.run_cmd("check", "--format", "json", self.at("nope.md"))
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("nope.md", json.loads(out)["error"])
+        self.assertIn("nope.md", json.loads(out)["error"]["message"])
 
     def test_check_format_github_scope_error_is_an_annotation(self):
         self.write("t.md", "# T\n")
@@ -1716,7 +1820,7 @@ class ReflockTest(unittest.TestCase):
         rc, out, err = self.run_cmd("suspects", "--json", self.at("nope.md"))
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("nope.md", json.loads(out)["error"])
+        self.assertIn("nope.md", json.loads(out)["error"]["message"])
 
     # --- UX-03: next-step hints ---------------------------------------------
     EXPLAIN_HINT = "Run `reflock explain <file>:<line>` for details on any of the above."
@@ -1828,7 +1932,7 @@ class ReflockTest(unittest.TestCase):
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
             rc = reflock.main(["--root", self.d, "check", "-q", "--format", "json"])
         self.assertEqual(rc, 1)
-        findings = json.loads(buf.getvalue())
+        findings = self.findings(buf.getvalue())
         self.assertEqual(len(findings), 1)
         self.assertEqual(err.getvalue(), "")
 
@@ -2130,7 +2234,7 @@ class ReflockTest(unittest.TestCase):
 
     def backlinks_json(self, *args):
         rc, out, err = self.run_backlinks(*args, "--format", "json")
-        return rc, json.loads(out), err
+        return rc, self.findings(out), err
 
     def test_backlinks_lists_referrers_sorted(self):
         self.write("t.md", "# Title\n")
@@ -2221,7 +2325,7 @@ class ReflockTest(unittest.TestCase):
 
     def explain_json(self, *args):
         rc, out, err = self.run_explain(*args, "--format", "json")
-        return rc, json.loads(out), err
+        return rc, self.findings(out), err
 
     def test_explain_ok_reference(self):
         self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n")
@@ -2309,27 +2413,27 @@ class ReflockTest(unittest.TestCase):
         rc, out, err = self.run_explain("not-a-spec", "--format", "json")
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("not-a-spec", json.loads(out)["error"])
+        self.assertIn("not-a-spec", json.loads(out)["error"]["message"])
 
     def test_explain_format_json_unknown_file_goes_to_stdout(self):
         rc, out, err = self.run_explain("nope.md:1", "--format", "json")
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("nope.md", json.loads(out)["error"])
+        self.assertIn("nope.md", json.loads(out)["error"]["message"])
 
     def test_explain_format_json_out_of_range_line_goes_to_stdout(self):
         self.write("a.md", "text\n")
         rc, out, err = self.run_explain("a.md:99", "--format", "json")
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("a.md", json.loads(out)["error"])
+        self.assertIn("a.md", json.loads(out)["error"]["message"])
 
     def test_explain_format_json_no_reference_on_line_goes_to_stdout(self):
         self.write("a.md", "no refs here\n")
         rc, out, err = self.run_explain("a.md:1", "--format", "json")
         self.assertEqual(2, rc)
         self.assertEqual("", err)
-        self.assertIn("a.md", json.loads(out)["error"])
+        self.assertIn("a.md", json.loads(out)["error"]["message"])
 
     def test_explain_anchor_heading_span(self):
         self.write("t.md", "# H\n\n## Decision\n\nWe chose X.\n\n## Next\n\nmore\n")
@@ -2742,6 +2846,42 @@ class BenchHarnessTest(unittest.TestCase):
     def test_expect_stdout_empty_fails_when_anything_printed(self):
         fails = self.run_steps({"cmd": "check", "expect_stdout_empty": True})
         self.assertTrue(fails, "the default human report prints a summary line")
+
+    def test_expect_json_subset_ignores_unnamed_keys(self):
+        """The point of the primitive: pin `command` without having to predict
+        `root` (a temp path) or `reflock` (a version)."""
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "expect_json_subset": {"command": "check", "problems": 0},
+             "args": ["--format", "json"]}))
+
+    def test_expect_json_subset_fails_on_a_named_key_that_differs(self):
+        fails = self.run_steps(
+            {"cmd": "check", "args": ["--format", "json"],
+             "expect_json_subset": {"command": "stamp"}})
+        self.assertTrue(fails)
+
+    def test_expect_json_subset_fails_on_a_missing_key(self):
+        fails = self.run_steps(
+            {"cmd": "check", "args": ["--format", "json"],
+             "expect_json_subset": {"nosuchkey": 1}})
+        self.assertTrue(fails)
+
+    def test_expect_json_subset_does_not_shorten_arrays(self):
+        """Subset semantics stop at dict keys. A fixture asserting one finding
+        must fail when two arrive, or the primitive would quietly weaken every
+        assertion built on it."""
+        self.write("a.md", "See [x](missing.md) and [y](gone.md)\n")
+        fails = self.run_steps(
+            {"cmd": "check", "args": ["--format", "json"],
+             "expect_json_subset": {"findings": [{"verdict": "DANGLING"}]}})
+        self.assertTrue(fails)
+
+    def test_expect_json_subset_matches_nested_findings(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "args": ["--format", "json"],
+             "expect_json_subset": {"findings": [{"verdict": "DANGLING", "file": "a.md"}],
+                                    "summary": {"DANGLING": 1}}}))
 
     def test_expect_stderr_not_contains(self):
         self.write("a.md", "See [x](missing.md)\n")

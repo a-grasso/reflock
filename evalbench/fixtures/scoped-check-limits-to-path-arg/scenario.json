@@ -8,15 +8,17 @@
         "docs"
       ],
       "expect_exit": 1,
-      "expect_json": [
-        {
-          "verdict": "DANGLING",
-          "file": "docs/a.md",
-          "line": 1,
-          "target": "missing.md",
-          "detail": "no such file: docs/missing.md"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "file": "docs/a.md",
+            "line": 1,
+            "target": "missing.md",
+            "detail": "no such file: docs/missing.md"
+          }
+        ]
+      }
     }
   ]
 }

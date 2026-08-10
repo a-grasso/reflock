@@ -7,15 +7,17 @@
         "--json"
       ],
       "expect_exit": 1,
-      "expect_json": [
-        {
-          "verdict": "DANGLING",
-          "file": "caller.py",
-          "line": 1,
-          "target": "lib.py#ghost",
-          "detail": "no anchor '#ghost' in lib.py"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "file": "caller.py",
+            "line": 1,
+            "target": "lib.py#ghost",
+            "detail": "no anchor '#ghost' in lib.py"
+          }
+        ]
+      }
     }
   ]
 }

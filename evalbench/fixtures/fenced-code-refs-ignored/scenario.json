@@ -7,7 +7,9 @@
         "--json"
       ],
       "expect_exit": 0,
-      "expect_json": []
+      "expect_json_subset": {
+        "findings": []
+      }
     },
     {
       "cmd": "suspects",
@@ -16,7 +18,9 @@
         "--json"
       ],
       "expect_exit": 0,
-      "expect_json": []
+      "expect_json_subset": {
+        "findings": []
+      }
     }
   ]
 }

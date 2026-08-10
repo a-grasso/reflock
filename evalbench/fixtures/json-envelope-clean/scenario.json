@@ -1,0 +1,27 @@
+{
+  "description": "AGT-01: a clean tree still emits the full envelope - empty findings, all-zero summary, exit 0",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 0,
+      "expect_stderr_empty": true,
+      "expect_json_subset": {
+        "schema": 1,
+        "command": "check",
+        "findings": [],
+        "summary": {
+          "OK": 0,
+          "DANGLING": 0,
+          "DRIFTED": 0,
+          "UNSTAMPED": 0,
+          "UNSUPPORTED": 0
+        },
+        "problems": 0
+      }
+    }
+  ]
+}

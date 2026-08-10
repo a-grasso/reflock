@@ -3,15 +3,20 @@
   "steps": [
     {
       "cmd": "suspects",
-      "args": ["--all", "--json"],
+      "args": [
+        "--all",
+        "--json"
+      ],
       "expect_exit": 1,
-      "expect_json": [
-        {
-          "file": "m.py",
-          "line": 1,
-          "target": "build/legacy/out.json"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "file": "m.py",
+            "line": 1,
+            "target": "build/legacy/out.json"
+          }
+        ]
+      }
     }
   ]
 }

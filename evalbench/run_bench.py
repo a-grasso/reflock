@@ -73,12 +73,51 @@ def run_reflock(tmp: str, cmd: str, args: list[str]) -> tuple[int, str, str]:
 # checked nothing.
 STEP_KEYS = frozenset({
     "description", "write", "cmd", "args",
-    "expect_exit", "expect_json",
+    "expect_exit", "expect_json", "expect_json_subset",
     "expect_contains", "expect_not_contains", "expect_file_regex",
     "expect_stderr", "expect_stderr_not_contains", "expect_stderr_empty",
     "expect_stdout_empty",
     "expect_stdout_same_as_step", "expect_tree_unchanged_since_step",
 })
+
+
+def json_subset_mismatch(expected, actual, path: str = "") -> str | None:
+    """None if `expected` is a subset of `actual`, else where they part ways.
+
+    A dict matches when every key it names matches; keys it does not name are
+    the caller's business. Lists and scalars match exactly - subset semantics on
+    a list would let a fixture assert one finding and silently pass with five,
+    which is the failure mode this whole module exists to prevent.
+
+    Exists because the output envelope carries `root` (a temp path that differs
+    every run) and `reflock` (which changes every release) alongside fields a
+    fixture does want to pin exactly. Without this, those two fields would force
+    every envelope fixture onto `expect_contains` and assert far less.
+    """
+    where = path or "<root>"
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return f"{where}: expected an object, got {type(actual).__name__}"
+        for key, want in expected.items():
+            if key not in actual:
+                return f"{where}: missing key {key!r}"
+            sub = json_subset_mismatch(want, actual[key], f"{path}.{key}" if path else key)
+            if sub:
+                return sub
+        return None
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return f"{where}: expected an array, got {type(actual).__name__}"
+        if len(expected) != len(actual):
+            return f"{where}: expected {len(expected)} item(s), got {len(actual)}"
+        for i, (want, got) in enumerate(zip(expected, actual)):
+            sub = json_subset_mismatch(want, got, f"{path}[{i}]")
+            if sub:
+                return sub
+        return None
+    if expected != actual:
+        return f"{where}: expected {json.dumps(expected)}, got {json.dumps(actual)}"
+    return None
 
 
 class StepContext:
@@ -163,6 +202,16 @@ def check_step(tmp: str, step: dict, ctx: StepContext) -> list[str]:
                 fails.append("json mismatch:\n"
                               f"  expected: {json.dumps(step['expect_json'])}\n"
                               f"  actual:   {json.dumps(actual)}")
+    if "expect_json_subset" in step:
+        try:
+            actual = json.loads(out)
+        except json.JSONDecodeError as e:
+            fails.append(f"stdout is not valid JSON: {e}\n--- stdout ---\n{out}")
+        else:
+            mismatch = json_subset_mismatch(step["expect_json_subset"], actual)
+            if mismatch:
+                fails.append(f"json subset mismatch: {mismatch}\n"
+                             f"  actual: {json.dumps(actual)}")
     for needle in step.get("expect_contains", []):
         if needle not in out:
             fails.append(f"expected stdout to contain {needle!r}\n--- stdout ---\n{out}")

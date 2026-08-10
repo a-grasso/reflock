@@ -3,11 +3,20 @@
   "steps": [
     {
       "cmd": "suspects",
-      "args": ["--all", "--json"],
+      "args": [
+        "--all",
+        "--json"
+      ],
       "expect_exit": 1,
-      "expect_json": [
-        {"file": "boot.sh", "line": 2, "target": "conf/app.properties"}
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "file": "boot.sh",
+            "line": 2,
+            "target": "conf/app.properties"
+          }
+        ]
+      }
     }
   ]
 }

@@ -7,7 +7,9 @@
         "--json"
       ],
       "expect_exit": 0,
-      "expect_json": []
+      "expect_json_subset": {
+        "findings": []
+      }
     },
     {
       "cmd": "suspects",
@@ -16,13 +18,15 @@
         "--json"
       ],
       "expect_exit": 1,
-      "expect_json": [
-        {
-          "file": "lib.py",
-          "line": 1,
-          "target": "other/module.py"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "file": "lib.py",
+            "line": 1,
+            "target": "other/module.py"
+          }
+        ]
+      }
     }
   ]
 }

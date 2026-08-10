@@ -3,11 +3,22 @@
   "steps": [
     {
       "cmd": "backlinks",
-      "args": ["t.md", "--format", "json"],
-      "expect_json": [
-        {"file": "a.md", "line": 1, "target": "t.md", "pin": "unpinned"}
+      "args": [
+        "t.md",
+        "--format",
+        "json"
       ],
-      "expect_exit": 0
+      "expect_exit": 0,
+      "expect_json_subset": {
+        "findings": [
+          {
+            "file": "a.md",
+            "line": 1,
+            "target": "t.md",
+            "pin": "unpinned"
+          }
+        ]
+      }
     }
   ]
 }

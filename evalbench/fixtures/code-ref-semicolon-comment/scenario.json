@@ -8,15 +8,17 @@
         "--verbose"
       ],
       "expect_exit": 0,
-      "expect_json": [
-        {
-          "verdict": "OK",
-          "file": "caller.ini",
-          "line": 1,
-          "target": "target.md#sec",
-          "detail": "unpinned"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "OK",
+            "file": "caller.ini",
+            "line": 1,
+            "target": "target.md#sec",
+            "detail": "unpinned"
+          }
+        ]
+      }
     }
   ]
 }

@@ -40,24 +40,12 @@ items:
   # Contracts in roadmap/AGT-*.md; cross-cutting calls in roadmap/DECIDED.md
   # (D7, D8). AGT-01 is first deliberately: it is the only breaking change in
   # the set, and every item after it is additive because it landed.
-  - id: AGT-01
-    title: A versioned envelope for machine-readable output
-    source: roadmap/AGT-01-json-envelope.md
-    tier: near
-    owner: agent
-    status: ready
-    note: >
-      Breaking change to `--format json`. Ship before the surface is announced,
-      not after - the whole cost of this item is paid by whoever scripts against
-      the bare array first.
-
   - id: AGT-02
     title: Findings carry structure, not just prose
     source: roadmap/AGT-02-structured-finding-detail.md
     tier: near
     owner: agent
-    status: blocked
-    blocked_by: [AGT-01]
+    status: ready
 
   - id: AGT-04
     title: The Stop hook must not send an agent to repair a config error
@@ -74,8 +62,7 @@ items:
     source: roadmap/AGT-05-stamp-check-format-json.md
     tier: near
     owner: agent
-    status: blocked
-    blocked_by: [AGT-01]
+    status: ready
 
   - id: AGT-03
     title: Say what is stable
@@ -83,7 +70,7 @@ items:
     tier: near
     owner: agent
     status: blocked
-    blocked_by: [AGT-01, AGT-02]
+    blocked_by: [AGT-02]
     note: >
       Docs only, and last on purpose: it documents tested behavior, so it must
       follow the items whose fixtures back its claims. AGT-05 need not precede
@@ -172,6 +159,7 @@ items:
 # Shipped. Ids only: the contract for <id> is roadmap/<id>-*.md, and git holds
 # the entry as it stood. Kept so `blocked_by` ids stay resolvable.
 done:
+  - AGT-01
   - BUG-02
   - FMT-01
   - NS-02a

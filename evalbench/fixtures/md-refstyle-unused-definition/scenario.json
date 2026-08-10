@@ -3,11 +3,21 @@
   "steps": [
     {
       "cmd": "check",
-      "args": ["--json"],
+      "args": [
+        "--json"
+      ],
       "expect_exit": 1,
-      "expect_json": [
-        {"verdict": "DANGLING", "file": "a.md", "line": 3, "target": "missing.md", "detail": "no such file: missing.md"}
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "file": "a.md",
+            "line": 3,
+            "target": "missing.md",
+            "detail": "no such file: missing.md"
+          }
+        ]
+      }
     }
   ]
 }

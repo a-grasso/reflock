@@ -7,15 +7,17 @@
         "--json"
       ],
       "expect_exit": 1,
-      "expect_json": [
-        {
-          "verdict": "DANGLING",
-          "file": "package-lock.json",
-          "line": 1,
-          "target": "gone/module.py",
-          "detail": "no such file: gone/module.py"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "file": "package-lock.json",
+            "line": 1,
+            "target": "gone/module.py",
+            "detail": "no such file: gone/module.py"
+          }
+        ]
+      }
     },
     {
       "cmd": "suspects",
@@ -24,7 +26,9 @@
         "--json"
       ],
       "expect_exit": 0,
-      "expect_json": []
+      "expect_json_subset": {
+        "findings": []
+      }
     }
   ]
 }

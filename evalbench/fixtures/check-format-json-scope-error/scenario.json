@@ -1,12 +1,22 @@
 {
-  "description": "BUG-07: check --format json puts a ScopeError on stdout as {\"error\": ...}, not stderr",
+  "description": "BUG-07 + AGT-01: check --format json puts a ScopeError on stdout inside the envelope, not on stderr",
   "steps": [
     {
       "cmd": "check",
-      "args": ["--format", "json", "nope.md"],
+      "args": [
+        "--format",
+        "json",
+        "nope.md"
+      ],
       "expect_exit": 2,
-      "expect_json": {"error": "no such path in tree: nope.md"},
-      "expect_stderr_empty": true
+      "expect_stderr_empty": true,
+      "expect_json_subset": {
+        "findings": [],
+        "error": {
+          "message": "no such path in tree: nope.md",
+          "kind": "scope"
+        }
+      }
     }
   ]
 }

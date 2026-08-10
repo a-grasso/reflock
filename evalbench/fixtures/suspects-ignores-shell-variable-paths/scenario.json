@@ -3,11 +3,20 @@
   "steps": [
     {
       "cmd": "suspects",
-      "args": ["--all", "--json"],
+      "args": [
+        "--all",
+        "--json"
+      ],
       "expect_exit": 1,
-      "expect_json": [
-        {"file": "mvnw-like.sh", "line": 3, "target": "build/snapshot.py"}
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "file": "mvnw-like.sh",
+            "line": 3,
+            "target": "build/snapshot.py"
+          }
+        ]
+      }
     }
   ]
 }

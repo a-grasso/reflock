@@ -3,23 +3,29 @@
   "steps": [
     {
       "cmd": "check",
-      "args": ["--json"],
+      "args": [
+        "--json"
+      ],
       "expect_exit": 1,
-      "expect_json": [
-        {
-          "verdict": "UNSTAMPED",
-          "file": "sub/doc.md",
-          "line": 1,
-          "target": "t.md",
-          "detail": "run: reflock stamp"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "UNSTAMPED",
+            "file": "sub/doc.md",
+            "line": 1,
+            "target": "t.md",
+            "detail": "run: reflock stamp"
+          }
+        ]
+      }
     },
     {
       "cmd": "stamp",
       "args": [],
       "expect_exit": 0,
-      "expect_contains": ["Stamped 1 pin(s)."],
+      "expect_contains": [
+        "Stamped 1 pin(s)."
+      ],
       "expect_file_regex": {
         "sub/doc.md": "<!--@4f66db61-->"
       }
@@ -28,7 +34,9 @@
       "cmd": "check",
       "args": [],
       "expect_exit": 0,
-      "expect_contains": ["All references OK."]
+      "expect_contains": [
+        "All references OK."
+      ]
     }
   ]
 }

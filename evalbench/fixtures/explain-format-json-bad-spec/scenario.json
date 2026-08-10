@@ -1,12 +1,22 @@
 {
-  "description": "BUG-07: explain --format json puts an invalid-spec error on stdout as {\"error\": ...}",
+  "description": "BUG-07 + AGT-01: explain --format json puts an invalid-spec error on stdout inside the envelope",
   "steps": [
     {
       "cmd": "explain",
-      "args": ["not-a-spec", "--format", "json"],
+      "args": [
+        "not-a-spec",
+        "--format",
+        "json"
+      ],
       "expect_exit": 2,
-      "expect_json": {"error": "invalid <file>:<line> spec: not-a-spec"},
-      "expect_stderr_empty": true
+      "expect_stderr_empty": true,
+      "expect_json_subset": {
+        "findings": [],
+        "error": {
+          "message": "invalid <file>:<line> spec: not-a-spec",
+          "kind": "usage"
+        }
+      }
     }
   ]
 }

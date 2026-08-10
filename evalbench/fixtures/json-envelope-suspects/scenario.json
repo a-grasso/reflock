@@ -1,0 +1,27 @@
+{
+  "description": "AGT-01: suspects --json carries the same envelope, named by command",
+  "steps": [
+    {
+      "cmd": "suspects",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "schema": 1,
+        "command": "suspects",
+        "findings": [
+          {
+            "file": "a.md",
+            "line": 1,
+            "target": "platform/research.sh"
+          }
+        ],
+        "summary": {
+          "suspects": 1
+        },
+        "problems": 1
+      }
+    }
+  ]
+}

@@ -3,11 +3,22 @@
   "steps": [
     {
       "cmd": "check",
-      "args": ["--json", "--verbose"],
+      "args": [
+        "--json",
+        "--verbose"
+      ],
       "expect_exit": 0,
-      "expect_json": [
-        {"verdict": "OK", "file": "a.md", "line": 3, "target": "t.md#real", "detail": "unpinned"}
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "OK",
+            "file": "a.md",
+            "line": 3,
+            "target": "t.md#real",
+            "detail": "unpinned"
+          }
+        ]
+      }
     }
   ]
 }

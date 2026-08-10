@@ -70,20 +70,54 @@ exits nonzero with an error naming both flags. `github` emits GitHub Actions
 inline annotations - see [Three gates, three trust boundaries](#three-gates-three-trust-boundaries)
 below for the CI usage.
 
+JSON output is always one object - the **envelope** - never a bare array:
+
+```json
+{
+  "schema": 1,
+  "reflock": "0.4.0",
+  "command": "check",
+  "root": "/abs/path/to/repo",
+  "findings": [
+    { "verdict": "DRIFTED", "file": "a.md", "line": 1,
+      "target": "b.md#head", "detail": "pinned @bf607b1d, now @e1fad960" }
+  ],
+  "summary": { "OK": 0, "DANGLING": 0, "DRIFTED": 1, "UNSTAMPED": 0, "UNSUPPORTED": 0 },
+  "problems": 1
+}
+```
+
+`findings` is always an array, on every exit path, so a consumer never has to
+check the top-level type before iterating. `summary` counts the findings beside
+it and always carries all five verdict keys, zeros included - so without
+`--verbose`, where `check` reports only problems, a clean tree is all zeros.
+`problems` is the count that drives the exit code. `schema` is an integer that
+identifies the shape: adding a key or a vocabulary member leaves it alone,
+removing or repurposing one bumps it.
+
+The same envelope covers `explain`, `backlinks` and `suspects --json`, with
+`command` naming which one produced it and `findings` carrying that command's
+rows.
+
 A usage error (an unmatched path, a bad `explain` spec, an unknown `backlinks`
 target) is rendered in the same format that was requested: `--format json`
-prints `{"error": "..."}` on stdout, `--format github` prints one
-`::error::` annotation on stdout, and the default `human` format keeps
-printing `error: ...` to stderr. `stamp` and `suspects` have no `--format`
-flag, so their errors are always the plain stderr form (`suspects --json`'s
-pre-existing flag is the one exception - its errors follow `--json` too).
+prints the envelope with an empty `findings` array and an `error` object -
+`{"kind": "scope", "message": "no such path in tree: docs/"}` - on stdout,
+`--format github` prints one `::error::` annotation on stdout, and the default
+`human` format keeps printing `error: ...` to stderr. `kind` is a closed
+vocabulary (`scope` for a path naming nothing, `usage` for a rejected flag
+combination) and is what a caller should branch on; `message` is prose.
+`stamp` and `suspects` have no `--format` flag, so their errors are always the
+plain stderr form (`suspects --json`'s pre-existing flag is the one exception -
+its errors follow `--json` too).
 
 `check -q` / `check --quiet` prints nothing on success; on failure it prints
 one summary line - `reflock: 1 of 137 references failed` - to **stderr** and
 exits nonzero, for a CI log that only wants to hear from reflock when
-something's wrong. With `--format json`, `-q` leaves the findings array on
-stdout untouched and just suppresses the human summary line. `-q --verbose`
-is contradictory and exits nonzero naming both flags.
+something's wrong. With `--format json`, `-q` leaves the whole envelope on
+stdout untouched and just suppresses the human summary line - it is quiet for
+humans, not less JSON. `-q --verbose` is contradictory and exits nonzero naming
+both flags.
 
 `reflock completion {bash,zsh,fish}` prints a static completion script for the
 named shell to stdout - it writes nothing and installs nothing itself:

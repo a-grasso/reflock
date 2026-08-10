@@ -1,0 +1,57 @@
+{
+  "description": "AGT-01: summary counts match the findings array and problems drives the exit code",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "expect_exit": 0
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "command": "check",
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "file": "a.md",
+            "line": 2,
+            "target": "gone.md"
+          }
+        ],
+        "summary": {
+          "OK": 0,
+          "DANGLING": 1,
+          "DRIFTED": 0,
+          "UNSTAMPED": 0,
+          "UNSUPPORTED": 0
+        },
+        "problems": 1
+      }
+    },
+    {
+      "write": {
+        "t.md": "# Title\n\n## Head\n\nRewritten text.\n"
+      },
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "summary": {
+          "OK": 0,
+          "DANGLING": 1,
+          "DRIFTED": 1,
+          "UNSTAMPED": 0,
+          "UNSUPPORTED": 0
+        },
+        "problems": 2
+      }
+    }
+  ]
+}

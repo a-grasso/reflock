@@ -9,6 +9,7 @@ import json
 import os
 import sys
 
+from reflock_lib import __version__
 from reflock_lib.grammar import EXTERNAL, FP_VERSION, PATHISH, Index, Ref
 from reflock_lib.engine import (
     classify,
@@ -127,13 +128,59 @@ def scoped_files(idx: Index, paths: list[str]) -> list[str]:
     return sorted(selected)
 
 
-def render_json(results, problems: int, args) -> int:
-    print(json.dumps([{"verdict": v, "file": r.src, "line": r.line,
-                       "target": r.target, "detail": d} for v, r, d in results], indent=2))
+SCHEMA = 1
+
+VERDICTS = ("OK", "DANGLING", "DRIFTED", "UNSTAMPED", "UNSUPPORTED")
+
+
+def envelope(command: str, root: str, findings: list, summary: dict,
+             problems: int, **extra) -> dict:
+    """The one shape every JSON emitter produces (D7).
+
+    `findings` is always an array, on every exit path including errors, so a
+    consumer never has to type-switch on the top level and the naive
+    `for f in json.load(fh)` cannot silently iterate the characters of an error
+    string - which is what the previous bare-array-or-error-object shape did.
+
+    `schema` is emitted, never negotiated. Additive changes (a new key, a new
+    vocabulary member) leave it alone; removing or repurposing a key bumps it.
+    That asymmetry is the whole reason it exists: it buys room to grow this
+    surface later without a flag day.
+    """
+    env = {"schema": SCHEMA, "reflock": __version__, "command": command,
+           "root": root, "findings": findings, "summary": summary,
+           "problems": problems}
+    env.update(extra)
+    return env
+
+
+def emit_json(env: dict) -> None:
+    print(json.dumps(env, indent=2))
+
+
+def verdict_summary(verdicts) -> dict:
+    """Counts per verdict over the findings being reported, all five keys
+    present so a consumer branching on `summary["DRIFTED"]` never needs a
+    default. It counts the `findings` array, not every reference in the tree:
+    a summary that disagreed with the array beside it would be a worse lie than
+    no summary at all. Without --verbose, `check` reports only problems, so a
+    clean tree is all zeros."""
+    counts = dict.fromkeys(VERDICTS, 0)
+    for v in verdicts:
+        counts[v] = counts.get(v, 0) + 1
+    return counts
+
+
+def render_json(idx, results, problems: int, args) -> int:
+    emit_json(envelope(
+        "check", idx.root,
+        [{"verdict": v, "file": r.src, "line": r.line,
+          "target": r.target, "detail": d} for v, r, d in results],
+        verdict_summary(v for v, _, _ in results), problems))
     return 1 if problems else 0
 
 
-def render_human(results, problems: int, args) -> int:
+def render_human(idx, results, problems: int, args) -> int:
     color = use_color(args)
     for v in ("DANGLING", "DRIFTED", "UNSUPPORTED", "UNSTAMPED", "OK"):
         group = [(r, d) for vv, r, d in results if vv == v]
@@ -166,7 +213,7 @@ def github_escape_message(text: str) -> str:
     return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def render_github(results, problems: int, args) -> int:
+def render_github(idx, results, problems: int, args) -> int:
     for v, r, d in results:
         level = GITHUB_LEVEL.get(v)
         if level is None:
@@ -214,16 +261,27 @@ def intended_format(args) -> str:
     return "json" if getattr(args, "json", False) else "human"
 
 
-def render_error(message: str, fmt: str) -> None:
+ERROR_KINDS = ("usage", "scope")
+
+
+def render_error(message: str, fmt: str, kind: str = "usage",
+                 command: str = "", root: str = "") -> None:
     """The one place a usage error becomes output, in whatever format the
     command's caller asked for - the error-path counterpart to RENDERERS.
 
     json/github land the error on stdout in their own shape, so a script or
     agent that requested a format gets something to parse even on failure;
     human keeps today's plain `error: <message>` line on stderr.
+
+    The json form is the full envelope with an empty `findings` array, not a
+    bare `{"error": ...}` object (D7): the error path is exactly where a
+    consumer is least likely to have written a type check, so it must not be
+    the one path that changes shape under it. `kind` is the closed vocabulary a
+    caller branches on; `message` is prose and may be reworded (D8).
     """
     if fmt == "json":
-        print(json.dumps({"error": message}))
+        emit_json(envelope(command, root, [], verdict_summary(()), 0,
+                           error={"kind": kind, "message": message}))
     elif fmt == "github":
         print(f"::error::{github_escape_message(message)}")
     else:
@@ -234,17 +292,17 @@ def cmd_check(idx: Index, args) -> int:
     try:
         fmt = resolve_format(args)
     except FormatConflict as e:
-        render_error(str(e), intended_format(args))
+        render_error(str(e), intended_format(args), "usage", "check", idx.root)
         return 2
     if args.quiet and args.verbose:
-        render_error("--quiet conflicts with --verbose", fmt)
+        render_error("--quiet conflicts with --verbose", fmt, "usage", "check", idx.root)
         return 2
     results = []
     total = 0
     try:
         scoped = scoped_files(idx, args.paths)
     except ScopeError as e:
-        render_error(str(e), fmt)
+        render_error(str(e), fmt, "scope", "check", idx.root)
         return 2
     for rel in scoped:
         for ref in parse_refs(idx, rel):
@@ -257,7 +315,7 @@ def cmd_check(idx: Index, args) -> int:
         if problems:
             print(f"reflock: {problems} of {total} references failed", file=sys.stderr)
         return 1 if problems else 0
-    return RENDERERS[fmt](results, problems, args)
+    return RENDERERS[fmt](idx, results, problems, args)
 
 
 def stampable_fingerprint(idx: Index, ref: Ref) -> str | None:
@@ -317,12 +375,12 @@ def cmd_stamp(idx: Index, args) -> int:
     if warn and not getattr(args, "check", False):
         # Plain `stamp` already exits 0, so accepting --warn there would imply it
         # did something.
-        render_error("--warn requires --check", intended_format(args))
+        render_error("--warn requires --check", intended_format(args), "usage", "stamp", idx.root)
         return 2
     try:
         edits_by_rel, report = plan_stamp(idx, args)
     except ScopeError as e:
-        render_error(str(e), intended_format(args))
+        render_error(str(e), intended_format(args), "scope", "stamp", idx.root)
         return 2
     if getattr(args, "check", False):
         for rel, ref, kind, fp in report:
@@ -383,7 +441,7 @@ def cmd_stamp(idx: Index, args) -> int:
     return 0
 
 
-def render_backlinks_human(rows, target: str, args) -> int:
+def render_backlinks_human(idx, rows, target: str, args) -> int:
     if not rows:
         print(f"No backlinks to {target}.")
         return 0
@@ -393,9 +451,12 @@ def render_backlinks_human(rows, target: str, args) -> int:
     return 0
 
 
-def render_backlinks_json(rows, target: str, args) -> int:
-    print(json.dumps([{"file": rel, "line": line, "target": tgt, "pin": pin}
-                      for rel, line, tgt, pin in rows], indent=2))
+def render_backlinks_json(idx, rows, target: str, args) -> int:
+    emit_json(envelope(
+        "backlinks", idx.root,
+        [{"file": rel, "line": line, "target": tgt, "pin": pin}
+         for rel, line, tgt, pin in rows],
+        {"backlinks": len(rows)}, 0, queried=target))
     return 0
 
 
@@ -406,19 +467,19 @@ def cmd_backlinks(idx: Index, args) -> int:
     try:
         fmt = resolve_format(args)
     except FormatConflict as e:
-        render_error(str(e), intended_format(args))
+        render_error(str(e), intended_format(args), "usage", "backlinks", idx.root)
         return 2
     arg_path, _, target_anchor = args.path.partition("#")
     target_anchor = target_anchor or None
     target_path = indexed_path(idx, arg_path)
     if target_path is None:
-        render_error(f"no such file in index: {arg_path}", fmt)
+        render_error(f"no such file in index: {arg_path}", fmt, "scope", "backlinks", idx.root)
         return 2
     if target_anchor is not None and locate_anchor(idx, target_path, target_anchor)[0] is None:
         # Same reasoning as the missing-file case: "nothing points at this
         # section" is the answer you act on before editing that section, so a
         # misspelled anchor must not be able to produce it.
-        render_error(f"no anchor '#{target_anchor}' in {target_path}", fmt)
+        render_error(f"no anchor '#{target_anchor}' in {target_path}", fmt, "scope", "backlinks", idx.root)
         return 2
     rows = []
     for rel in scoped_files(idx, []):
@@ -442,7 +503,7 @@ def cmd_backlinks(idx: Index, args) -> int:
             pin = "unpinned" if ref.pin is None else ("unstamped" if ref.pin == "" else "pinned")
             rows.append((ref.src, ref.line, ref.target, pin))
     rows.sort(key=lambda r: (r[0], r[1]))
-    return BACKLINKS_RENDERERS[fmt](rows, target_path, args)
+    return BACKLINKS_RENDERERS[fmt](idx, rows, target_path, args)
 
 
 def explain_entry(idx: Index, ref: Ref) -> dict:
@@ -492,7 +553,7 @@ def unit_preview(unit: str, full: bool) -> str:
                      + [f"… {withheld} more {noun} (--full to show)"])
 
 
-def render_explain_human(entries, args) -> int:
+def render_explain_human(idx, entries, args) -> int:
     color = use_color(args)
     for e in entries:
         print(f"reference   {e['file']}:{e['line']}")
@@ -520,9 +581,13 @@ def render_explain_human(entries, args) -> int:
     return 1 if any(e["verdict"] in BAD for e in entries) else 0
 
 
-def render_explain_json(entries, args) -> int:
-    print(json.dumps([{k: v for k, v in e.items() if k != "unit_text"} for e in entries], indent=2))
-    return 1 if any(e["verdict"] in BAD for e in entries) else 0
+def render_explain_json(idx, entries, args) -> int:
+    problems = sum(1 for e in entries if e["verdict"] in BAD)
+    emit_json(envelope(
+        "explain", idx.root,
+        [{k: v for k, v in e.items() if k != "unit_text"} for e in entries],
+        verdict_summary(e["verdict"] for e in entries), problems))
+    return 1 if problems else 0
 
 
 EXPLAIN_RENDERERS = {"human": render_explain_human, "json": render_explain_json}
@@ -532,27 +597,27 @@ def cmd_explain(idx: Index, args) -> int:
     try:
         fmt = resolve_format(args)
     except FormatConflict as e:
-        render_error(str(e), intended_format(args))
+        render_error(str(e), intended_format(args), "usage", "explain", idx.root)
         return 2
     file_part, sep, line_part = args.spec.rpartition(":")
     if not sep or not line_part.isdigit() or int(line_part) < 1:
-        render_error(f"invalid <file>:<line> spec: {args.spec}", fmt)
+        render_error(f"invalid <file>:<line> spec: {args.spec}", fmt, "usage", "explain", idx.root)
         return 2
     lineno = int(line_part)
     rel = indexed_path(idx, file_part)
     if rel is None:
-        render_error(f"no such file in index: {file_part}", fmt)
+        render_error(f"no such file in index: {file_part}", fmt, "scope", "explain", idx.root)
         return 2
     lines = idx.lines.get(rel)
     if lines is None or lineno > len(lines):
-        render_error(f"{rel} has no line {lineno}", fmt)
+        render_error(f"{rel} has no line {lineno}", fmt, "scope", "explain", idx.root)
         return 2
     refs = [r for r in parse_refs(idx, rel) if r.line == lineno]  # parse_refs owns the order
     if not refs:
-        render_error(f"no reference on {rel}:{lineno}", fmt)
+        render_error(f"no reference on {rel}:{lineno}", fmt, "scope", "explain", idx.root)
         return 2
     entries = [explain_entry(idx, r) for r in refs]
-    return EXPLAIN_RENDERERS[fmt](entries, args)
+    return EXPLAIN_RENDERERS[fmt](idx, entries, args)
 
 
 def cmd_suspects(idx: Index, args) -> int:
@@ -561,7 +626,7 @@ def cmd_suspects(idx: Index, args) -> int:
     try:
         scoped = scoped_files(idx, args.paths)
     except ScopeError as e:
-        render_error(str(e), intended_format(args))
+        render_error(str(e), intended_format(args), "scope", "suspects", idx.root)
         return 2
     tails = path_tails(idx)  # once per run; a hashmap lookup per token (PERF-01)
     for rel in scoped:
@@ -609,8 +674,11 @@ def cmd_suspects(idx: Index, args) -> int:
     hits = [(rel, lineno, tok) for rel, lineno, tok, cands in candidates
             if not any(c in ignored for c in cands)]
     if args.json:
-        print(json.dumps([{"file": rel, "line": lineno, "target": tok}
-                          for rel, lineno, tok in hits], indent=2))
+        emit_json(envelope(
+            "suspects", idx.root,
+            [{"file": rel, "line": lineno, "target": tok}
+             for rel, lineno, tok in hits],
+            {"suspects": len(hits)}, len(hits)))
     else:
         for rel, lineno, tok in hits:
             print(f"  {rel}:{lineno}  {tok}   [bare path, does not resolve]")

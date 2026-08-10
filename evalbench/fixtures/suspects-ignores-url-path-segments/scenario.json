@@ -8,13 +8,15 @@
         "--json"
       ],
       "expect_exit": 1,
-      "expect_json": [
-        {
-          "file": "deps.json",
-          "line": 8,
-          "target": "build/snapshot.py"
-        }
-      ]
+      "expect_json_subset": {
+        "findings": [
+          {
+            "file": "deps.json",
+            "line": 8,
+            "target": "build/snapshot.py"
+          }
+        ]
+      }
     }
   ]
 }
