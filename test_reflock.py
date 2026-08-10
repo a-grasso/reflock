@@ -1913,6 +1913,161 @@ class ReflockTest(unittest.TestCase):
         entry = self.findings(buf.getvalue())[0]
         self.assertEqual("no-such-file", entry["reason"])
 
+    # --- AGT-05: stamp --format json ----------------------------------------
+    def stamp_env(self, *args):
+        """`stamp --format json`'s envelope, plus the exit code and stderr."""
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "stamp", "--format", "json", *args])
+        return rc, json.loads(buf.getvalue()), err.getvalue()
+
+    def one_unstamped_pin(self):
+        self.write("t.md", "# T\n\nbody\n")
+        self.write("a.md", "See [t](t.md)<!--@-->.\n")
+
+    def test_stamp_json_written_is_false_for_every_check_and_true_for_a_write(self):
+        """There is no third state, and the key is on every exit path: without it
+        "these pins changed" and "these pins would change" are the same
+        document."""
+        self.one_unstamped_pin()
+        for args in (("--check",), ("--check", "--warn"), ("--check", "--rebless")):
+            with self.subTest(args=args):
+                _, env, _ = self.stamp_env(*args)
+                self.assertIs(False, env["written"])
+        _, env, _ = self.stamp_env()
+        self.assertIs(True, env["written"])
+        _, noop, _ = self.stamp_env("--check")     # nothing left to do
+        self.assertIs(False, noop["written"])
+
+    def test_stamp_json_written_is_false_on_the_error_path_too(self):
+        self.one_unstamped_pin()
+        for args in (("nope.md",), ("--warn",)):
+            with self.subTest(args=args):
+                rc, env, err = self.stamp_env(*args)
+                self.assertEqual(2, rc)
+                self.assertEqual("", err)
+                self.assertIs(False, env["written"])
+                self.assertEqual([], env["findings"])
+                self.assertIn(env["error"]["kind"], reflock.ERROR_KINDS)
+
+    def test_stamp_json_summary_keys_are_exactly_the_two_actions(self):
+        """Zeros included, and no verdict keys: `stamp` reports actions, and an
+        envelope that borrowed check's summary would be answering a different
+        question."""
+        self.one_unstamped_pin()
+        rc, env, _ = self.stamp_env("--check")
+        self.assertEqual(1, rc)
+        self.assertEqual({"stamp": 1, "rebless": 0}, env["summary"])
+        self.assertEqual(set(reflock.STAMP_ACTIONS), set(env["summary"]))
+        _, err_env, _ = self.stamp_env("nope.md")
+        self.assertEqual({"stamp": 0, "rebless": 0}, err_env["summary"])
+
+    def test_stamp_json_reports_the_digest_it_actually_wrote(self):
+        """The one way this command can report a plausible lie: a `current` that
+        is not what landed in the file."""
+        self.one_unstamped_pin()
+        rc, env, _ = self.stamp_env()
+        self.assertEqual(0, rc)
+        self.assertEqual(1, len(env["findings"]))
+        finding = env["findings"][0]
+        self.assertEqual("stamp", finding["action"])
+        self.assertIn(f"<!--@{finding['current']}-->", self.read("a.md"))
+
+    def test_stamp_json_stamp_action_has_no_pinned_key(self):
+        """There is no prior digest on an empty `@`; absence is the signal."""
+        self.one_unstamped_pin()
+        _, env, _ = self.stamp_env("--check")
+        self.assertNotIn("pinned", env["findings"][0])
+
+    def test_stamp_json_rebless_action_carries_both_digests(self):
+        self.one_unstamped_pin()
+        self.stamp()
+        was = re.search(r"@([0-9a-f]+)", self.read("a.md")).group(1)
+        self.write("t.md", "# T\n\nreworded\n")
+        rc, env, _ = self.stamp_env("--check", "--rebless")
+        self.assertEqual(1, rc)
+        finding = env["findings"][0]
+        self.assertEqual("rebless", finding["action"])
+        self.assertEqual(was, finding["pinned"])
+        self.assertNotEqual(finding["pinned"], finding["current"])
+
+    def test_stamp_json_actions_are_the_closed_vocabulary(self):
+        self.one_unstamped_pin()
+        self.stamp()                                     # a.md is now pinned
+        self.write("t.md", "# T\n\nreworded\n")           # ... and drifted
+        self.write("b.md", "See [t](t.md)<!--@-->.\n")    # never stamped
+        _, env, _ = self.stamp_env("--check", "--rebless")
+        actions = sorted(f["action"] for f in env["findings"])
+        self.assertEqual(["rebless", "stamp"], actions)
+        for finding in env["findings"]:
+            self.assertIn(finding["action"], reflock.STAMP_ACTIONS)
+
+    def test_stamp_check_json_warn_softens_the_code_not_the_body(self):
+        """--warn is an exit-code decision (NS-03b). A body that changed with it
+        would make the advisory mode lie about what it found."""
+        self.one_unstamped_pin()
+        plain_rc, plain, _ = self.stamp_env("--check")
+        warn_rc, warned, _ = self.stamp_env("--check", "--warn")
+        self.assertEqual((1, 0), (plain_rc, warn_rc))
+        self.assertEqual(plain, warned)
+        self.assertEqual(1, warned["problems"])
+
+    def test_stamp_check_json_writes_nothing(self):
+        self.one_unstamped_pin()
+        before = self.read("a.md")
+        rc, env, _ = self.stamp_env("--check")
+        self.assertEqual(1, rc)
+        self.assertEqual(before, self.read("a.md"))
+        self.assertIs(False, env["written"])
+
+    def test_stamp_json_noop_is_an_empty_findings_array(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [t](t.md).\n")          # unpinned, nothing to do
+        rc, env, _ = self.stamp_env("--check")
+        self.assertEqual(0, rc)
+        self.assertEqual([], env["findings"])
+        self.assertEqual(0, env["problems"])
+
+    def test_stamp_json_problems_mirrors_the_check_exit_code(self):
+        self.one_unstamped_pin()
+        check_rc, check_env, _ = self.stamp_env("--check")
+        self.assertEqual((1, 1), (check_rc, check_env["problems"]))
+        write_rc, write_env, _ = self.stamp_env()
+        self.assertEqual((0, 0), (write_rc, write_env["problems"]))
+
+    def test_stamp_json_still_refuses_rebless_without_reviewed(self):
+        """NS-10's friction is the feature, and a JSON caller is exactly who
+        would be tempted around it. The refusal is reported, not relaxed."""
+        self.one_unstamped_pin()
+        self.stamp()
+        pinned = self.read("a.md")
+        self.write("t.md", "# T\n\nreworded\n")
+        rc, env, _ = self.stamp_env("--rebless")
+        self.assertEqual(1, rc)
+        self.assertIs(False, env["written"])
+        self.assertEqual(pinned, self.read("a.md"))
+        self.assertEqual("rebless", env["findings"][0]["action"])
+
+    def test_stamp_human_output_is_untouched_by_the_new_flag(self):
+        """--format human is the default and byte-identical to no flag at all."""
+        self.one_unstamped_pin()
+        outputs = []
+        for args in (["--check"], ["--check", "--format", "human"]):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                reflock.main(["--root", self.d, "stamp", *args])
+            outputs.append(buf.getvalue())
+        self.assertEqual(outputs[0], outputs[1])
+        self.assertIn("1 pin(s) would be stamped.", outputs[0])
+
+    def test_stamp_rejects_github_format(self):
+        """Stamping is not a PR-annotation surface (NS-04)."""
+        self.one_unstamped_pin()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            reflock.main(["--root", self.d, "stamp", "--format", "github"])
+        self.assertEqual(2, cm.exception.code)
+
     # --- BUG-07: usage errors respect --format ------------------------------
     def render_error(self, message, fmt):
         out, err = io.StringIO(), io.StringIO()

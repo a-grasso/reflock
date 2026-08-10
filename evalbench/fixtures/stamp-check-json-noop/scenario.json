@@ -1,0 +1,25 @@
+{
+  "description": "AGT-05: stamp --check --format json with nothing to do is an empty findings array, not a missing one - and it says written: false even though it never had anything to write.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [
+        "--check",
+        "--format",
+        "json"
+      ],
+      "expect_exit": 0,
+      "expect_stderr_empty": true,
+      "expect_json_subset": {
+        "command": "stamp",
+        "findings": [],
+        "summary": {
+          "stamp": 0,
+          "rebless": 0
+        },
+        "problems": 0,
+        "written": false
+      }
+    }
+  ]
+}

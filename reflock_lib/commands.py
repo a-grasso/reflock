@@ -258,8 +258,9 @@ def intended_format(args) -> str:
     a successful resolve_format() call, so the error lands in the same shape
     the caller asked for even when that ask was itself the problem.
 
-    Commands with no --format concept (stamp, suspects) always read "human"
-    here: they have no JSON/github renderer to route an error through (D1).
+    Commands with no --format concept always read "human" here: they have no
+    JSON/github renderer to route an error through (D1). `suspects` is the one
+    such command left - its pre-existing --json is read below, not --format.
     """
     fmt = getattr(args, "format", None)
     if fmt:
@@ -271,7 +272,8 @@ ERROR_KINDS = ("usage", "scope")
 
 
 def render_error(message: str, fmt: str, kind: str = "usage",
-                 command: str = "", root: str = "") -> None:
+                 command: str = "", root: str = "",
+                 summary: dict | None = None, **extra) -> None:
     """The one place a usage error becomes output, in whatever format the
     command's caller asked for - the error-path counterpart to RENDERERS.
 
@@ -284,10 +286,17 @@ def render_error(message: str, fmt: str, kind: str = "usage",
     consumer is least likely to have written a type check, so it must not be
     the one path that changes shape under it. `kind` is the closed vocabulary a
     caller branches on; `message` is prose and may be reworded (D8).
+
+    `summary` and `extra` let a command keep its own envelope shape on the error
+    path: `stamp`'s summary counts actions rather than verdicts, and its
+    `written` key has to be present here too or a caller reading it would find
+    the error path the one place it is missing - the same argument that makes
+    `findings` an array on every exit.
     """
     if fmt == "json":
-        emit_json(envelope(command, root, [], verdict_summary(()), 0,
-                           error={"kind": kind, "message": message}))
+        emit_json(envelope(command, root, [],
+                           verdict_summary(()) if summary is None else summary, 0,
+                           error={"kind": kind, "message": message}, **extra))
     elif fmt == "github":
         print(f"::error::{github_escape_message(message)}")
     else:
@@ -376,19 +385,71 @@ def plan_stamp(idx: Index, args):
     return edits_by_rel, report
 
 
+STAMP_FORMATS = ("human", "json")
+"""No `github`: stamping is not a PR-annotation surface, and NS-04 scoped the
+annotation levels to findings."""
+
+STAMP_ACTIONS = ("stamp", "rebless")
+"""What `stamp` can do to a pin: fill an empty `@` (`stamp`) or replace an
+existing digest (`rebless`). `--rebless` and `--reviewed` exist because the
+second is the dangerous one, so the report must not blur them either."""
+
+
+def stamp_findings(report) -> list:
+    """plan_stamp's report as the envelope's `findings` (AGT-05).
+
+    Entries are stamp-shaped rather than check-shaped - one envelope, one key,
+    different rows. `pinned` is absent on an `action: "stamp"` because there is
+    no prior digest to name; absence is the signal (AGT-02).
+    """
+    findings = []
+    for rel, ref, kind, fp in report:
+        finding = {"file": rel, "line": ref.line, "target": ref.target,
+                   "action": "stamp" if kind == "unstamped" else "rebless"}
+        if kind != "unstamped":
+            finding["pinned"] = ref.pin
+        finding["current"] = fp
+        findings.append(finding)
+    return findings
+
+
+def stamp_summary(report) -> dict:
+    counts = dict.fromkeys(STAMP_ACTIONS, 0)
+    for finding in stamp_findings(report):
+        counts[finding["action"]] += 1
+    return counts
+
+
+def emit_stamp_json(idx: Index, report, problems: int, written: bool) -> None:
+    """`written` is the one thing a caller cannot infer from the rest: without
+    it "these pins changed" and "these pins would change" are the same
+    document, and that difference is the whole point of --check."""
+    emit_json(envelope("stamp", idx.root, stamp_findings(report),
+                       stamp_summary(report), problems, written=written))
+
+
 def cmd_stamp(idx: Index, args) -> int:
+    fmt = intended_format(args)
     warn = getattr(args, "warn", False)
     if warn and not getattr(args, "check", False):
         # Plain `stamp` already exits 0, so accepting --warn there would imply it
         # did something.
-        render_error("--warn requires --check", intended_format(args), "usage", "stamp", idx.root)
+        render_error("--warn requires --check", fmt, "usage", "stamp", idx.root,
+                     summary=stamp_summary(()), written=False)
         return 2
     try:
         edits_by_rel, report = plan_stamp(idx, args)
     except ScopeError as e:
-        render_error(str(e), intended_format(args), "scope", "stamp", idx.root)
+        render_error(str(e), fmt, "scope", "stamp", idx.root,
+                     summary=stamp_summary(()), written=False)
         return 2
     if getattr(args, "check", False):
+        # `problems` mirrors the exit code --check *would* return: --warn softens
+        # the code, not the report (NS-03b). A body that changed with --warn
+        # would make the advisory mode lie about what it found.
+        if fmt == "json":
+            emit_stamp_json(idx, report, len(report), written=False)
+            return 0 if (warn or not report) else 1
         for rel, ref, kind, fp in report:
             print(f"  {rel}:{ref.line}  {ref.target}   [{kind}]")
         if report:
@@ -408,6 +469,13 @@ def cmd_stamp(idx: Index, args) -> int:
         # with what changed. One rule in a TTY and in CI alike: a gate that
         # behaves differently under a terminal is a gate people learn to
         # distrust. See docs/roadmap/PUB-01-pre-announcement-scope.md.
+        #
+        # A JSON caller is exactly who would be tempted around this gate, so it
+        # reports the same refusal: nothing was written, and the pins that would
+        # have been are named so the caller can go read them.
+        if fmt == "json":
+            emit_stamp_json(idx, report, len(report), written=False)
+            return 1
         for rel, ref, kind, fp in report:
             if kind == "stale":
                 print(f"  {rel}:{ref.line}  {ref.target}   [@{ref.pin} -> @{fp}]")
@@ -443,6 +511,11 @@ def cmd_stamp(idx: Index, args) -> int:
     # anyway keeps "the Index reflects the tree" true without needing that
     # argument to hold.
     idx.fps.clear()
+    if fmt == "json":
+        # Exit 0, so `problems` is 0: it mirrors the exit code, and a successful
+        # write is not a problem. What was written is in `findings`.
+        emit_stamp_json(idx, report, 0, written=True)
+        return 0
     print(f"Stamped {changed} pin(s).")
     return 0
 

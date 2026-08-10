@@ -17,6 +17,7 @@ reflock check          # report problems (exit 1 if any)
 reflock stamp          # fill empty pins
 reflock stamp --rebless --reviewed doc/DESIGN.md   # accept current target state for these refs
 reflock stamp --check  # report what stamp would do, write nothing (exit 1 if not a no-op)
+reflock stamp --check --format json   # ... the same report, machine-readable
 reflock suspects --all # bare path-shaped tokens that resolve to nothing
 reflock backlinks doc/DESIGN.md   # what points at this file, before you edit it
 reflock explain doc/DESIGN.md:42  # everything about one reference
@@ -135,9 +136,47 @@ prints the envelope with an empty `findings` array and an `error` object -
 `human` format keeps printing `error: ...` to stderr. `kind` is a closed
 vocabulary (`scope` for a path naming nothing, `usage` for a rejected flag
 combination) and is what a caller should branch on; `message` is prose.
-`stamp` and `suspects` have no `--format` flag, so their errors are always the
-plain stderr form (`suspects --json`'s pre-existing flag is the one exception -
-its errors follow `--json` too).
+`suspects` has no `--format` flag, so its errors follow its pre-existing
+`--json` instead; without that flag they take the plain stderr form.
+
+### stamp --format json
+
+`stamp` takes `--format <human|json>` too, through the same renderer, and emits
+the same envelope with `command: "stamp"`. There is no `github` level: stamping
+is not a PR-annotation surface.
+
+```json
+{
+  "schema": 1,
+  "command": "stamp",
+  "findings": [
+    { "file": "a.md", "line": 1, "target": "b.md#head",
+      "action": "rebless", "pinned": "bf607b1d", "current": "e1fad960" }
+  ],
+  "summary": { "stamp": 0, "rebless": 1 },
+  "problems": 1,
+  "written": false
+}
+```
+
+The entries are stamp-shaped rather than check-shaped - the pins acted on, or
+that would be - and `action` is a closed vocabulary of two: `stamp` for an empty
+`@` gaining its first digest, `rebless` for an existing digest being replaced.
+The second is the dangerous one, which is why `--rebless` and `--reviewed` exist
+at all, so the report keeps them apart. `pinned` is absent on `action: "stamp"`;
+there is no prior digest.
+
+`written` is the difference between a real run and `--check`: `true` only when
+pins were actually rewritten, `false` on every `--check`, on the `--rebless`
+refusal, and on an error. Without it, "these pins changed" and "these pins would
+change" would be the same document. `problems` mirrors the `--check` exit code -
+the number of pins that need attention, `0` after a successful write. `--warn`
+still forces exit 0 and leaves the body untouched: the code softens, the report
+does not lie about what it found.
+
+`--reviewed` is not relaxed for machine callers. A JSON caller is exactly who
+would be tempted to skip it, so `--rebless` without it still writes nothing and
+exits 1 - reporting, in the same envelope, the pins it declined to re-bless.
 
 `check -q` / `check --quiet` prints nothing on success; on failure it prints
 one summary line - `reflock: 1 of 137 references failed` - to **stderr** and

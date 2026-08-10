@@ -10,6 +10,7 @@ from reflock_lib.commands import (
     BACKLINKS_RENDERERS,
     EXPLAIN_RENDERERS,
     RENDERERS,
+    STAMP_FORMATS,
     UNIT_PREVIEW_LINES,
     cmd_backlinks,
     cmd_check,
@@ -50,8 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
                               "  reflock stamp\n"
                               "  reflock stamp --check\n"
                               "  reflock stamp --rebless\n"
-                              "  reflock stamp --rebless --reviewed\n")
+                              "  reflock stamp --rebless --reviewed\n"
+                              "  reflock stamp --check --format json\n")
     s.add_argument("paths", nargs="*")
+    s.add_argument("--format", choices=sorted(STAMP_FORMATS), default=None,
+                   help="output format (default: human)")
     s.add_argument("--rebless", action="store_true", help="re-hash existing pins too")
     s.add_argument("--reviewed", action="store_true",
                    help="with --rebless: confirm you read what drifted (required to write)")

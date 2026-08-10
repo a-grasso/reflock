@@ -1,0 +1,46 @@
+{
+  "description": "AGT-05: a real stamp --format json says written: true, exits 0, and the digest it reports as current is the one that landed in the file - the one way this command could report a plausible lie.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 0,
+      "expect_stderr_empty": true,
+      "expect_json_subset": {
+        "command": "stamp",
+        "findings": [
+          {
+            "file": "a.md",
+            "line": 1,
+            "target": "t.md",
+            "action": "stamp",
+            "current": "7638c55a"
+          }
+        ],
+        "summary": {
+          "stamp": 1,
+          "rebless": 0
+        },
+        "problems": 0,
+        "written": true
+      },
+      "expect_file_regex": {
+        "a.md": "^See \\[t\\]\\(t\\.md\\)<!--@7638c55a-->\\.\n$"
+      }
+    },
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 0,
+      "expect_json_subset": {
+        "findings": []
+      }
+    }
+  ]
+}

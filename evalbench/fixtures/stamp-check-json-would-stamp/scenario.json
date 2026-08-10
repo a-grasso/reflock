@@ -1,0 +1,39 @@
+{
+  "description": "AGT-05: an empty @ under --check --format json is one finding with action stamp and no pinned key, exit 1, and the file on disk is untouched.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [
+        "--check",
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_stderr_empty": true,
+      "expect_json_subset": {
+        "command": "stamp",
+        "findings": [
+          {
+            "file": "a.md",
+            "line": 1,
+            "target": "t.md",
+            "action": "stamp",
+            "current": "7638c55a"
+          }
+        ],
+        "summary": {
+          "stamp": 1,
+          "rebless": 0
+        },
+        "problems": 1,
+        "written": false
+      },
+      "expect_json_absent": [
+        "findings[0].pinned"
+      ],
+      "expect_file_regex": {
+        "a.md": "^See \\[t\\]\\(t\\.md\\)<!--@-->\\.\n$"
+      }
+    }
+  ]
+}

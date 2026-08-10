@@ -1,0 +1,35 @@
+{
+  "description": "AGT-05 + NS-03b: --check --warn --format json softens the exit code and nothing else - byte-identical stdout to the same run without --warn, which is what stops the advisory mode from lying about what it found.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [
+        "--check",
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "problems": 1,
+        "written": false,
+        "summary": {
+          "stamp": 1,
+          "rebless": 0
+        }
+      }
+    },
+    {
+      "cmd": "stamp",
+      "args": [
+        "--check",
+        "--warn",
+        "--format",
+        "json"
+      ],
+      "expect_exit": 0,
+      "expect_stderr_empty": true,
+      "expect_stdout_same_as_step": 0,
+      "expect_tree_unchanged_since_step": 0
+    }
+  ]
+}
