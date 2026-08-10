@@ -1,0 +1,29 @@
+{
+  "description": "AGT-02: two same-basename targets make a wiki-link wiki-ambiguous, and the candidates it could not choose between are an array in resolution order, not only a sentence.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "file": "a.md",
+            "line": 1,
+            "target": "loader",
+            "reason": "wiki-ambiguous",
+            "candidates": [
+              "docs/loader.md",
+              "spec/loader.md"
+            ],
+            "detail": "ambiguous: docs/loader.md, spec/loader.md"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -334,11 +334,12 @@ def resolve_path(src: str, target: str) -> str | None:
     return None if p.startswith("..") else p
 
 
-def resolve_wikilink(idx: Index, src: str, path_part: str) -> tuple[str | None, str | None]:
+def resolve_wikilink(idx: Index, src: str, path_part: str) -> tuple[str | None, dict | None]:
     """Relative-first, then unique-basename resolution for wiki-links (D4).
 
-    Returns (path, detail); detail is set only when path is None, for the
-    DANGLING message (plain no-match vs. ambiguous basename).
+    Returns (path, info); info is set only when path is None and carries why the
+    link dangled, both as prose (`detail`) and as data (`reason`, plus
+    `candidates` when the basename was ambiguous) - see resolve_target.
     """
     candidate = path_part if os.path.splitext(path_part)[1] else path_part + ".md"
     rel = resolve_path(src, candidate)
@@ -349,8 +350,9 @@ def resolve_wikilink(idx: Index, src: str, path_part: str) -> tuple[str | None, 
     if len(matches) == 1:
         return matches[0], None
     if len(matches) > 1:
-        return None, f"ambiguous: {', '.join(matches)}"
-    return None, f"no such file: {path_part}"
+        return None, {"reason": "wiki-ambiguous", "candidates": matches,
+                      "detail": f"ambiguous: {', '.join(matches)}"}
+    return None, {"reason": "wiki-unresolved", "detail": f"no such file: {path_part}"}
 
 
 def unit_text(idx: Index, path: str, anchor: str | None) -> str | None:
@@ -390,13 +392,17 @@ def unit_fingerprint(idx: Index, path: str, anchor: str | None) -> str | None:
     return fp
 
 
-def resolve_target(idx: Index, ref: Ref) -> tuple[str, str | None, str | None, str | None]:
-    """Resolve ref.target down to (kind, path, anchor, detail).
+def resolve_target(idx: Index, ref: Ref) -> tuple[str, str | None, str | None, dict | None]:
+    """Resolve ref.target down to (kind, path, anchor, info).
 
     kind is one of 'external', 'outside', 'dir', 'dangling', 'file'. path and
-    anchor are set only when kind == 'file'; detail explains a 'dangling'
-    kind. Shared by classify (verdicts) and cmd_explain (display) so the two
-    can't diverge on what a target resolves to.
+    anchor are set only when kind == 'file'; info explains a 'dangling' kind and
+    is None otherwise. Shared by classify (verdicts) and cmd_explain (display)
+    so the two can't diverge on what a target resolves to.
+
+    info keeps prose and structure in one slot - `detail` for humans, `reason`
+    (plus any reason-specific fields) for machines (D8) - so a caller that wants
+    the branch rather than the sentence never has to regex the sentence.
     """
     tgt = ref.target
     if EXTERNAL.match(tgt) and not tgt.startswith("#"):
@@ -407,9 +413,9 @@ def resolve_target(idx: Index, ref: Ref) -> tuple[str, str | None, str | None, s
         path_part, _, anchor = tgt.partition("#")
         anchor = anchor or None
         if ref.wiki:
-            path, detail = resolve_wikilink(idx, ref.src, path_part)
+            path, info = resolve_wikilink(idx, ref.src, path_part)
             if path is None:
-                return "dangling", None, None, detail
+                return "dangling", None, None, info
         else:
             path = resolve_path(ref.src, path_part)
             if path is None:
@@ -417,43 +423,77 @@ def resolve_target(idx: Index, ref: Ref) -> tuple[str, str | None, str | None, s
             if path not in idx.files:
                 if path.rstrip("/") in idx.dirs:
                     return "dir", None, None, None
-                return "dangling", None, None, f"no such file: {path}"
+                return "dangling", None, None, {"reason": "no-such-file",
+                                                "detail": f"no such file: {path}"}
     return "file", path, anchor, None
 
 
-def classify(idx: Index, ref: Ref) -> tuple[str, str]:
-    """Return (verdict, detail)."""
-    kind, path, anchor, detail = resolve_target(idx, ref)
+REASONS = {
+    "OK": ("external", "outside-tree", "dir", "unpinned", "pinned"),
+    "DANGLING": ("no-such-file", "no-such-anchor", "wiki-unresolved", "wiki-ambiguous"),
+    "DRIFTED": ("fingerprint-mismatch",),
+    "UNSTAMPED": ("empty-pin", "no-indexed-text"),
+    "UNSUPPORTED": ("future-fingerprint-version",),
+}
+"""The closed vocabulary naming which branch of classify() produced a verdict.
+
+`detail` is prose and reflock reserves the right to reword it; `reason` is the
+field a consumer branches on (D8, AGT-02). A verdict alone is too coarse for a
+repair loop: a DANGLING reference whose *file* is gone wants the link
+repointed, while one whose *anchor* is gone wants the fragment fixed, and those
+were previously distinguishable only by regexing the sentence.
+
+Every member must be reachable and every classify() return site must name one -
+test_reflock asserts both directions, which is what keeps this table and the
+code from drifting apart.
+"""
+
+
+def classify(idx: Index, ref: Ref) -> tuple[str, str, dict]:
+    """Return (verdict, detail, info).
+
+    `detail` is the human sentence; `info` carries `reason` (see REASONS) plus
+    whatever that branch can state as data instead of prose. Fields appear only
+    on the branches that define them: absence is the signal, so a consumer never
+    has to tell a null apart from a not-applicable.
+    """
+    kind, path, anchor, info = resolve_target(idx, ref)
     if kind == "external":
-        return "OK", "external"
+        return "OK", "external", {"reason": "external"}
     if kind == "outside":
-        return "OK", "outside tree"
+        return "OK", "outside tree", {"reason": "outside-tree"}
     if kind == "dir":
-        return "OK", "dir"
+        return "OK", "dir", {"reason": "dir"}
     if kind == "dangling":
-        return "DANGLING", detail
+        return ("DANGLING", info["detail"],
+                {k: v for k, v in info.items() if k != "detail"})
     actual = unit_fingerprint(idx, path, anchor)
     if actual is None:
-        return "DANGLING", f"no anchor '#{anchor}' in {path}"
+        return "DANGLING", f"no anchor '#{anchor}' in {path}", {"reason": "no-such-anchor"}
     if ref.pin is None:
-        return "OK", "unpinned"
+        return "OK", "unpinned", {"reason": "unpinned"}
     if ref.pin == "":
         if path not in idx.lines:
             # An indexed file with no text: `stamp` refuses to hash it (BUG-03),
             # so prescribing `reflock stamp` here would name a command that
             # provably does nothing.
-            return "UNSTAMPED", f"cannot fingerprint: no indexed text in {path}"
-        return "UNSTAMPED", "run: reflock stamp"
+            return ("UNSTAMPED", f"cannot fingerprint: no indexed text in {path}",
+                    {"reason": "no-indexed-text"})
+        return "UNSTAMPED", "run: reflock stamp", {"reason": "empty-pin"}
     version, hexpart = split_pin(ref.pin)
     if version != FP_VERSION:
         # Saying so is the whole point of reserving the version: this reflock
         # cannot compute a version-N fingerprint, so it must not claim the
         # target drifted. Silence would be worse still - the pin is unverified.
-        return "UNSUPPORTED", (f"pin @{ref.pin} uses fingerprint version {version}; "
-                               f"this reflock understands version {FP_VERSION} - upgrade reflock")
+        return ("UNSUPPORTED",
+                (f"pin @{ref.pin} uses fingerprint version {version}; "
+                 f"this reflock understands version {FP_VERSION} - upgrade reflock"),
+                {"reason": "future-fingerprint-version", "pin_version": version,
+                 "supported_version": FP_VERSION})
     if actual != hexpart:
-        return "DRIFTED", f"pinned @{hexpart}, now @{actual}"
-    return "OK", "pinned"
+        return ("DRIFTED", f"pinned @{hexpart}, now @{actual}",
+                {"reason": "fingerprint-mismatch", "pinned": hexpart, "current": actual})
+    return "OK", "pinned", {"reason": "pinned"}
 
 
 def locate_anchor(idx: Index, path: str, anchor: str) -> tuple[str, int, int] | tuple[None, None, None]:

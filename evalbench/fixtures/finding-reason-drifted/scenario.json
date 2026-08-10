@@ -1,0 +1,35 @@
+{
+  "description": "AGT-02: a DRIFTED finding carries reason fingerprint-mismatch and both digests as bare hex, agreeing with the prose detail.",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "write": {
+        "t.md": "# T\n\nThe body, reworded.\n"
+      },
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DRIFTED",
+            "file": "a.md",
+            "line": 1,
+            "target": "t.md",
+            "reason": "fingerprint-mismatch",
+            "pinned": "7638c55a",
+            "current": "d732fc4c",
+            "detail": "pinned @7638c55a, now @d732fc4c"
+          }
+        ]
+      }
+    }
+  ]
+}

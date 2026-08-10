@@ -80,7 +80,8 @@ JSON output is always one object - the **envelope** - never a bare array:
   "root": "/abs/path/to/repo",
   "findings": [
     { "verdict": "DRIFTED", "file": "a.md", "line": 1,
-      "target": "b.md#head", "detail": "pinned @bf607b1d, now @e1fad960" }
+      "target": "b.md#head", "detail": "pinned @bf607b1d, now @e1fad960",
+      "reason": "fingerprint-mismatch", "pinned": "bf607b1d", "current": "e1fad960" }
   ],
   "summary": { "OK": 0, "DANGLING": 0, "DRIFTED": 1, "UNSTAMPED": 0, "UNSUPPORTED": 0 },
   "problems": 1
@@ -98,6 +99,33 @@ removing or repurposing one bumps it.
 The same envelope covers `explain`, `backlinks` and `suspects --json`, with
 `command` naming which one produced it and `findings` carrying that command's
 rows.
+
+### Verdict reasons
+
+Every finding also carries a `reason`: a closed vocabulary naming *why* it got
+that verdict. `detail` is the same fact as an English sentence and may be
+reworded in any release; `reason` is the field to branch on. The two are not
+two spellings of one string - `reason` comes from the branch that decided the
+verdict, not from parsing the sentence.
+
+| Verdict | `reason` | Also carries |
+|---|---|---|
+| `OK` | `external`, `outside-tree`, `dir`, `unpinned`, `pinned` | — |
+| `DANGLING` | `no-such-file`, `no-such-anchor`, `wiki-unresolved`, `wiki-ambiguous` | `candidates` (array, resolution order) on `wiki-ambiguous` |
+| `DRIFTED` | `fingerprint-mismatch` | `pinned`, `current` - bare hex digests, no `@` |
+| `UNSTAMPED` | `empty-pin`, `no-indexed-text` | — |
+| `UNSUPPORTED` | `future-fingerprint-version` | `pin_version`, `supported_version` |
+
+The distinction a repair loop needs is `no-such-file` versus
+`no-such-anchor`: the first means repoint the link, the second means fix the
+fragment of a file that is right where it should be.
+
+The extra fields appear **only** on the verdicts that define them. A `DANGLING`
+finding has no `pinned` key at all rather than `pinned: null`, so nothing has to
+tell "not applicable" apart from "null".
+
+`reason` appears in `--format json` only. Human and `github` output are read by
+people, and `github` fixes `detail` as the annotation message.
 
 A usage error (an unmatched path, a bad `explain` spec, an unknown `backlinks`
 target) is rendered in the same format that was requested: `--format json`

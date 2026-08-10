@@ -172,18 +172,21 @@ def verdict_summary(verdicts) -> dict:
 
 
 def render_json(idx, results, problems: int, args) -> int:
+    # `info` is spread into the finding rather than nested under a key of its
+    # own: `reason` is what a consumer branches on, and burying it a level down
+    # would make the machine-readable field the awkward one to reach (AGT-02).
     emit_json(envelope(
         "check", idx.root,
         [{"verdict": v, "file": r.src, "line": r.line,
-          "target": r.target, "detail": d} for v, r, d in results],
-        verdict_summary(v for v, _, _ in results), problems))
+          "target": r.target, "detail": d, **info} for v, r, d, info in results],
+        verdict_summary(v for v, _, _, _ in results), problems))
     return 1 if problems else 0
 
 
 def render_human(idx, results, problems: int, args) -> int:
     color = use_color(args)
     for v in ("DANGLING", "DRIFTED", "UNSUPPORTED", "UNSTAMPED", "OK"):
-        group = [(r, d) for vv, r, d in results if vv == v]
+        group = [(r, d) for vv, r, d, _ in results if vv == v]
         if not group:
             continue
         print(f"\n{colorize(f'{v} ({len(group)})', v, color)}")
@@ -193,7 +196,7 @@ def render_human(idx, results, problems: int, args) -> int:
     print(f"\n{colorize(msg, 'DANGLING' if problems else 'OK', color)}")
     if problems:
         print("\nRun `reflock explain <file>:<line>` for details on any of the above.")
-        if any(v == "UNSTAMPED" for v, _, _ in results):
+        if any(v == "UNSTAMPED" for v, _, _, _ in results):
             print("Run `reflock stamp` to fill in UNSTAMPED pins.")
     return 1 if problems else 0
 
@@ -214,7 +217,10 @@ def github_escape_message(text: str) -> str:
 
 
 def render_github(idx, results, problems: int, args) -> int:
-    for v, r, d in results:
+    # `reason` deliberately does not appear here: NS-04 fixes `detail` as the
+    # annotation message and the verdict as its title, and an annotation is read
+    # by a human in a PR, not branched on by a script.
+    for v, r, d, _ in results:
         level = GITHUB_LEVEL.get(v)
         if level is None:
             continue
@@ -306,11 +312,11 @@ def cmd_check(idx: Index, args) -> int:
         return 2
     for rel in scoped:
         for ref in parse_refs(idx, rel):
-            verdict, detail = classify(idx, ref)
+            verdict, detail, info = classify(idx, ref)
             total += 1
             if verdict != "OK" or args.verbose:
-                results.append((verdict, ref, detail))
-    problems = sum(1 for v, _, _ in results if v in BAD)
+                results.append((verdict, ref, detail, info))
+    problems = sum(1 for v, _, _, _ in results if v in BAD)
     if args.quiet and fmt == "human":
         if problems:
             print(f"reflock: {problems} of {total} references failed", file=sys.stderr)
@@ -507,10 +513,14 @@ def cmd_backlinks(idx: Index, args) -> int:
 
 
 def explain_entry(idx: Index, ref: Ref) -> dict:
-    verdict, detail = classify(idx, ref)
+    verdict, detail, info = classify(idx, ref)
     kind, path, anchor, _ = resolve_target(idx, ref)
+    # `reason` only, not the rest of `info`: explain already reports `pin` and
+    # `current` in its own shape, and a second copy of the same digests under
+    # classify's names would be two sources of truth in one object.
     entry = {"file": ref.src, "line": ref.line, "target": ref.target, "verdict": verdict,
-              "detail": detail, "resolves_to": None, "anchor": None, "pin": None, "current": None,
+              "detail": detail, "reason": info["reason"],
+              "resolves_to": None, "anchor": None, "pin": None, "current": None,
               "unit_text": None}
     if kind != "file":
         return entry

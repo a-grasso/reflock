@@ -73,7 +73,7 @@ def run_reflock(tmp: str, cmd: str, args: list[str]) -> tuple[int, str, str]:
 # checked nothing.
 STEP_KEYS = frozenset({
     "description", "write", "cmd", "args",
-    "expect_exit", "expect_json", "expect_json_subset",
+    "expect_exit", "expect_json", "expect_json_subset", "expect_json_absent",
     "expect_contains", "expect_not_contains", "expect_file_regex",
     "expect_stderr", "expect_stderr_not_contains", "expect_stderr_empty",
     "expect_stdout_empty",
@@ -118,6 +118,28 @@ def json_subset_mismatch(expected, actual, path: str = "") -> str | None:
     if expected != actual:
         return f"{where}: expected {json.dumps(expected)}, got {json.dumps(actual)}"
     return None
+
+
+def json_path_present(doc, path: str) -> bool:
+    """Whether a dotted path with optional [i] indices exists in `doc`.
+
+    The counterpart to expect_json_subset: absence is a contract in its own
+    right (AGT-02 promises `pinned: null` is never emitted, only omitted), and
+    a subset assertion can only ever say what *is* there.
+    """
+    node = doc
+    for step in path.split("."):
+        name = step.split("[")[0]
+        indices = [int(tok) for tok in re.findall(r"\[(\d+)\]", step)]
+        if name:
+            if not isinstance(node, dict) or name not in node:
+                return False
+            node = node[name]
+        for i in indices:
+            if not isinstance(node, list) or i >= len(node):
+                return False
+            node = node[i]
+    return True
 
 
 class StepContext:
@@ -212,6 +234,16 @@ def check_step(tmp: str, step: dict, ctx: StepContext) -> list[str]:
             if mismatch:
                 fails.append(f"json subset mismatch: {mismatch}\n"
                              f"  actual: {json.dumps(actual)}")
+    if "expect_json_absent" in step:
+        try:
+            actual = json.loads(out)
+        except json.JSONDecodeError as e:
+            fails.append(f"stdout is not valid JSON: {e}\n--- stdout ---\n{out}")
+        else:
+            for path in step["expect_json_absent"]:
+                if json_path_present(actual, path):
+                    fails.append(f"expected {path} to be absent\n"
+                                 f"  actual: {json.dumps(actual)}")
     for needle in step.get("expect_contains", []):
         if needle not in out:
             fails.append(f"expected stdout to contain {needle!r}\n--- stdout ---\n{out}")

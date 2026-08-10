@@ -1,0 +1,28 @@
+{
+  "description": "AGT-02: reason-specific fields appear only on the verdicts that define them. A DANGLING finding carries no pinned/current/candidates keys at all - absence is the signal, so no consumer has to tell null apart from not-applicable.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "reason": "no-such-file"
+          }
+        ]
+      },
+      "expect_json_absent": [
+        "findings[0].pinned",
+        "findings[0].current",
+        "findings[0].candidates",
+        "findings[0].pin_version",
+        "findings[0].supported_version"
+      ]
+    }
+  ]
+}

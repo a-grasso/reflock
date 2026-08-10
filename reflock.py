@@ -74,6 +74,7 @@ from reflock_lib.grammar import (
     Ref,
 )
 from reflock_lib.engine import (
+    REASONS,
     UNAUTHORED_SOURCES,
     build_index,
     classify,

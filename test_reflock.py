@@ -1,6 +1,8 @@
 """Tests for reflock. Run: python3 -m unittest -v test_reflock"""
+import ast
 import contextlib
 import importlib.util
+import inspect
 import io
 import json
 import os
@@ -54,9 +56,19 @@ class ReflockTest(unittest.TestCase):
         with open(os.path.join(self.d, rel)) as fh:
             return fh.read()
 
-    def verdicts(self, rel):
+    def classified(self, rel):
+        """Every reference's full classify() result: (verdict, detail, info)."""
         idx = reflock.build_index(self.d)
         return [reflock.classify(idx, r) for r in reflock.parse_refs(idx, rel)]
+
+    def verdicts(self, rel):
+        """(verdict, detail) per reference - the prose half. `reason` and the
+        rest of `info` are AGT-02's surface and have their own tests; keeping
+        them out of here leaves every verdict/detail assertion readable."""
+        return [c[:2] for c in self.classified(rel)]
+
+    def reasons(self, rel):
+        return [c[2]["reason"] for c in self.classified(rel)]
 
     def verdict(self, rel):
         return self.verdicts(rel)[0][0]
@@ -1746,6 +1758,161 @@ class ReflockTest(unittest.TestCase):
         self.assertEqual(1, env["problems"])
         self.assertEqual(1, len(env["findings"]))
 
+    # --- AGT-02: findings carry structure, not just prose --------------------
+    def all_reasons(self):
+        """Every (verdict, reason) pair the vocabulary claims exists."""
+        return {(v, r) for v, rs in reflock.REASONS.items() for r in rs}
+
+    def classify_tree(self):
+        """One tree reaching every branch of classify(), as (verdict, reason)
+        pairs plus the findings themselves.
+
+        Built as a single tree rather than one per reason so the reachability
+        test cannot quietly stop covering a member: the assertion is set
+        equality against REASONS, and a branch nobody exercises fails it."""
+        self.write("t.md", "# T\n\nbody\n")                        # target
+        self.write("assets/logo.png", "not really binary\n")        # a dir target
+        with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
+            fh.write(b"\x00\x01binary")                            # no indexed text
+        self.write("docs/loader.md", "# Loader\n")
+        self.write("spec/loader.md", "# Loader\n")
+        self.write("stable.md", "# Stable\n")                       # never reworded
+        self.write("ok.md", "See [x](stable.md)<!--@-->.\n")         # stays pinned
+        self.write("drift.md", "See [x](t.md)<!--@-->.\n")
+        self.stamp()
+        self.write("t.md", "# T\n\nbody, reworded\n")               # now drifted
+        self.write("a.md",
+                   "[e](https://example.com)\n"
+                   "[o](../outside.md)\n"
+                   "[d](assets)\n"
+                   "[u](t.md)\n"
+                   "[f](missing.md)\n"
+                   "[n](t.md#ghost)\n"
+                   "[[nowhere]]\n"
+                   "[[loader]]\n"
+                   "[s](t.md)<!--@-->\n"
+                   "[b](blob.bin)<!--@-->\n"
+                   "[v](t.md)<!--@2:deadbeef-->\n")
+        idx = reflock.build_index(self.d)
+        findings = []
+        for rel in ("a.md", "ok.md", "drift.md"):
+            for ref in reflock.parse_refs(idx, rel):
+                verdict, detail, info = reflock.classify(idx, ref)
+                findings.append((verdict, detail, info))
+        return findings
+
+    def test_every_reason_in_the_vocabulary_is_reachable(self):
+        """A member nobody can produce is a lie in the contract, and a promise
+        of a closed vocabulary is only worth something if the set is exact."""
+        seen = {(v, i["reason"]) for v, _, i in self.classify_tree()}
+        self.assertEqual(self.all_reasons(), seen)
+
+    def test_every_classify_return_site_carries_a_reason(self):
+        """The other direction, and the one inputs cannot prove: `reason` is
+        derived from the branch, so a new branch that forgot it - or returned
+        the old two-tuple - must fail here rather than emit a finding with no
+        machine-readable answer on it."""
+        src = ast.parse(inspect.getsource(reflock_engine))
+        fn = next(n for n in ast.walk(src)
+                  if isinstance(n, ast.FunctionDef) and n.name == "classify")
+        returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
+        self.assertTrue(returns)
+        for node in returns:
+            with self.subTest(line=node.lineno):
+                self.assertIsInstance(node.value, ast.Tuple)
+                self.assertEqual(3, len(node.value.elts))
+
+    def test_every_reason_literal_in_the_engine_is_in_the_vocabulary(self):
+        """classify() takes the DANGLING reasons from resolve_target, so the
+        literals live in three functions. Scanning the module for them catches a
+        typo'd or undeclared member wherever it is written."""
+        src = ast.parse(inspect.getsource(reflock_engine))
+        literals = set()
+        for node in ast.walk(src):
+            if not isinstance(node, ast.Dict):
+                continue
+            for key, value in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == "reason"
+                        and isinstance(value, ast.Constant)):
+                    literals.add(value.value)
+        self.assertEqual({r for _, r in self.all_reasons()}, literals)
+
+    def test_reason_and_verdict_agree_with_the_table(self):
+        for verdict, _, info in self.classify_tree():
+            with self.subTest(reason=info["reason"]):
+                self.assertIn(info["reason"], reflock.REASONS[verdict])
+
+    def test_drifted_digests_match_the_detail_string(self):
+        """The two representations of the same fact cannot be allowed to drift:
+        `detail` is what a human reads in the report and `pinned`/`current` are
+        what a repair loop acts on."""
+        self.write("t.md", "# T\n\nbody\n")
+        self.write("a.md", "See [x](t.md)<!--@-->.\n")
+        self.stamp()
+        self.write("t.md", "# T\n\nreworded\n")
+        verdict, detail, info = self.classified("a.md")[0]
+        self.assertEqual("DRIFTED", verdict)
+        self.assertEqual("fingerprint-mismatch", info["reason"])
+        self.assertEqual(f"pinned @{info['pinned']}, now @{info['current']}", detail)
+        self.assertNotEqual(info["pinned"], info["current"])
+        for digest in (info["pinned"], info["current"]):
+            self.assertRegex(digest, r"^[0-9a-f]+$")   # bare hex, no "@"
+
+    def test_absent_rather_than_null_on_verdicts_that_do_not_define_them(self):
+        """`pinned: null` on a DANGLING finding would make every consumer write
+        a null check; absence is the signal (AGT-02)."""
+        self.write("a.md", "See [x](missing.md).\n")
+        _, findings = self.check_json()
+        self.assertEqual(1, len(findings))
+        self.assertEqual("no-such-file", findings[0]["reason"])
+        for key in ("pinned", "current", "candidates", "pin_version"):
+            self.assertNotIn(key, findings[0])
+
+    def test_dangling_file_and_anchor_are_distinguishable(self):
+        """The repair is different - repoint the link vs. fix the fragment - and
+        telling them apart used to need a regex over prose."""
+        self.write("t.md", "# T\n\n## Real\n\nbody\n")
+        self.write("a.md", "See [x](missing.md) and [y](t.md#ghost).\n")
+        self.assertEqual(["no-such-file", "no-such-anchor"], self.reasons("a.md"))
+
+    def test_wiki_ambiguous_lists_candidates_in_resolution_order(self):
+        self.write("docs/loader.md", "# Loader\n")
+        self.write("spec/loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader]] here.\n")
+        verdict, detail, info = self.classified("a.md")[0]
+        self.assertEqual(("DANGLING", "wiki-ambiguous"), (verdict, info["reason"]))
+        self.assertEqual(["docs/loader.md", "spec/loader.md"], info["candidates"])
+        self.assertEqual(f"ambiguous: {', '.join(info['candidates'])}", detail)
+
+    def test_unsupported_states_both_versions_as_numbers(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [x](t.md)<!--@2:deadbeef-->.\n")
+        verdict, _, info = self.classified("a.md")[0]
+        self.assertEqual(("UNSUPPORTED", "future-fingerprint-version"),
+                          (verdict, info["reason"]))
+        self.assertEqual(2, info["pin_version"])
+        self.assertEqual(reflock_engine.FP_VERSION, info["supported_version"])
+
+    def test_reason_does_not_reach_human_or_github_output(self):
+        """Both are read by people; NS-04 fixes github's message as `detail`."""
+        self.write("a.md", "See [x](missing.md).\n")
+        for fmt in ("human", "github"):
+            with self.subTest(fmt=fmt):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    reflock.main(["--root", self.d, "check", "--format", fmt])
+                self.assertNotIn("no-such-file", buf.getvalue())
+                self.assertIn("no such file: missing.md", buf.getvalue())
+
+    def test_explain_json_carries_the_reason(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "See [x](missing.md).\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            reflock.main(["--root", self.d, "explain", "a.md:1", "--format", "json"])
+        entry = self.findings(buf.getvalue())[0]
+        self.assertEqual("no-such-file", entry["reason"])
+
     # --- BUG-07: usage errors respect --format ------------------------------
     def render_error(self, message, fmt):
         out, err = io.StringIO(), io.StringIO()
@@ -1860,7 +2027,8 @@ class ReflockTest(unittest.TestCase):
         rc, findings = self.check_json()
         self.assertEqual(1, rc)
         self.assertEqual([{"verdict": "DANGLING", "file": "a.md", "line": 1,
-                            "target": "missing.md", "detail": "no such file: missing.md"}],
+                            "target": "missing.md", "detail": "no such file: missing.md",
+                            "reason": "no-such-file"}],
                           findings)
 
     def test_check_format_github_unaffected_by_hints(self):

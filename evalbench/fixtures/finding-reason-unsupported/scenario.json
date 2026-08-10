@@ -1,0 +1,26 @@
+{
+  "description": "AGT-02: a version-2 pin this reflock cannot compute yields future-fingerprint-version, with both versions as numbers so a caller can compare them without parsing the sentence.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "UNSUPPORTED",
+            "file": "a.md",
+            "line": 1,
+            "target": "t.md",
+            "reason": "future-fingerprint-version",
+            "pin_version": 2,
+            "supported_version": 1
+          }
+        ]
+      }
+    }
+  ]
+}

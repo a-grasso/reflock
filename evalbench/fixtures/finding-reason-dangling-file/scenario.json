@@ -1,0 +1,25 @@
+{
+  "description": "AGT-02: a target file that does not exist yields reason no-such-file - the repair is to repoint the link.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--format",
+        "json"
+      ],
+      "expect_exit": 1,
+      "expect_json_subset": {
+        "findings": [
+          {
+            "verdict": "DANGLING",
+            "file": "a.md",
+            "line": 1,
+            "target": "missing.md",
+            "reason": "no-such-file",
+            "detail": "no such file: missing.md"
+          }
+        ]
+      }
+    }
+  ]
+}
