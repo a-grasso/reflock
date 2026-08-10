@@ -47,16 +47,6 @@ items:
     owner: agent
     status: ready
 
-  - id: AGT-04
-    title: The Stop hook must not send an agent to repair a config error
-    source: roadmap/AGT-04-stop-hook-honors-exit-2.md
-    tier: near
-    owner: agent
-    status: ready
-    note: >
-      Live bug in shipped example code - exit 2 is reported to the agent as
-      broken references. Independent of the JSON items; can go first or last.
-
   - id: AGT-05
     title: stamp --check --format json
     source: roadmap/AGT-05-stamp-check-format-json.md
@@ -160,6 +150,7 @@ items:
 # the entry as it stood. Kept so `blocked_by` ids stay resolvable.
 done:
   - AGT-01
+  - AGT-04
   - BUG-02
   - FMT-01
   - NS-02a

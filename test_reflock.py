@@ -5,7 +5,9 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -2513,6 +2515,132 @@ class SetupClaudeTest(unittest.TestCase):
         before = json.dumps(settings)
         reflock_setup.add_stop_hook(settings)
         self.assertEqual(before, json.dumps(settings))
+
+    # --- AGT-04: the gate branches on the exit code ----------------------
+    # Both copies of the script are driven here - the one `setup claude`
+    # renders and the one shipped in examples/hooks/ - because they are
+    # separate files that must not diverge, and byte-equality cannot be
+    # asserted (the rendered one carries its own header and invocation).
+    def gate_scripts(self):
+        rendered = os.path.join(self.d, "rendered-gate.sh")
+        with open(rendered, "w", encoding="utf-8") as fh:
+            fh.write(reflock_setup.render_hook_script("reflock"))
+        os.chmod(rendered, 0o755)
+        shipped = os.path.join(os.path.dirname(os.path.abspath(reflock.__file__)),
+                               "examples", "hooks", "reflock-gate.sh")
+        return {"rendered": rendered, "shipped": shipped}
+
+    def run_gate(self, script, exit_code=0, stdout="", stderr="",
+                 stop_hook_active=False, reflock_missing=False):
+        """Run the gate with a stub `reflock` that exits however we say."""
+        stub_dir = tempfile.mkdtemp()
+        cmd = os.path.join(stub_dir, "stub-reflock")
+        with open(cmd, "w", encoding="utf-8") as fh:
+            fh.write("#!/usr/bin/env bash\n"
+                     f"printf '%s' {shlex.quote(stdout)}\n"
+                     f"printf '%s' {shlex.quote(stderr)} >&2\n"
+                     f"exit {exit_code}\n")
+        os.chmod(cmd, 0o755)
+        env = dict(os.environ,
+                   REFLOCK=os.path.join(stub_dir, "no-such-reflock") if reflock_missing else cmd)
+        p = subprocess.run(["bash", script], input=json.dumps(
+            {"stop_hook_active": stop_hook_active}), env=env, cwd=self.d,
+            capture_output=True, text=True)
+        return p
+
+    def test_gate_allows_the_stop_when_references_are_clean(self):
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                p = self.run_gate(script, exit_code=0, stdout="All references OK.\n")
+                self.assertEqual(0, p.returncode)
+                self.assertEqual("", p.stdout)
+
+    def test_gate_blocks_on_broken_references_and_feeds_the_report_back(self):
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                p = self.run_gate(script, exit_code=1,
+                                  stdout="DANGLING (1)\n  a.md:1  gone.md\n",
+                                  stderr="a warning nobody asked for\n")
+                self.assertEqual(0, p.returncode)
+                decision = json.loads(p.stdout)
+                self.assertEqual("block", decision["decision"])
+                self.assertIn("a.md:1", decision["reason"])
+                # stderr must stay out of the report an agent is told to act on
+                self.assertNotIn("nobody asked for", decision["reason"])
+
+    def test_gate_does_not_block_when_reflock_could_not_run(self):
+        """AGT-04: exit 2 means reflock evaluated nothing, so there is no
+        evidence the references are broken. Blocking here hands the agent a
+        config error to repair and it thrashes against it."""
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                p = self.run_gate(script, exit_code=2,
+                                  stderr="error: no such path in tree: docs/\n")
+                self.assertEqual(0, p.returncode)
+                self.assertNotIn("block", p.stdout)
+                self.assertEqual("", p.stdout.strip())
+                self.assertIn("skipped", p.stderr)
+                self.assertIn("2", p.stderr)
+                self.assertIn("no such path in tree", p.stderr)
+
+    def test_gate_fails_open_when_reflock_is_missing(self):
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                p = self.run_gate(script, reflock_missing=True)
+                self.assertEqual(0, p.returncode)
+                self.assertNotIn("block", p.stdout)
+                self.assertIn("skipped", p.stderr)
+
+    def test_gate_loop_guard_allows_the_stop_without_running_reflock(self):
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                p = self.run_gate(script, exit_code=1, stdout="DANGLING (1)\n",
+                                  stop_hook_active=True)
+                self.assertEqual(0, p.returncode)
+                self.assertEqual("", p.stdout)
+
+    def run_gate_for_real(self, script):
+        """The gate against the real reflock, not a stub.
+
+        The stub tests cannot see how the gate *invokes* reflock, and that is
+        where this hook was broken: it ran `reflock check --root <root>`, but
+        --root is a global flag that must precede the subcommand, so every
+        invocation was an argparse usage error - exit 2 on a clean tree and a
+        broken one alike. Nothing that mocks reflock away can catch that.
+        """
+        real = f"{sys.executable} {os.path.abspath(reflock.__file__)}"
+        p = subprocess.run(["bash", script], input=json.dumps({"stop_hook_active": False}),
+                           env=dict(os.environ, REFLOCK=real), cwd=self.d,
+                           capture_output=True, text=True)
+        return p
+
+    def test_gate_invokes_reflock_in_a_form_reflock_accepts(self):
+        with open(os.path.join(self.d, "t.md"), "w", encoding="utf-8") as fh:
+            fh.write("# T\n\nSee [x](gone.md).\n")
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                p = self.run_gate_for_real(script)
+                self.assertNotIn("unrecognized arguments", p.stderr)
+                self.assertNotIn("skipped", p.stderr)
+                self.assertEqual("block", json.loads(p.stdout)["decision"])
+                self.assertIn("gone.md", json.loads(p.stdout)["reason"])
+
+    def test_gate_lets_a_clean_tree_through_against_real_reflock(self):
+        with open(os.path.join(self.d, "t.md"), "w", encoding="utf-8") as fh:
+            fh.write("# T\n\nNothing to see.\n")
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                p = self.run_gate_for_real(script)
+                self.assertEqual("", p.stdout)
+                self.assertEqual(0, p.returncode)
+
+    def test_gate_needs_no_jq(self):
+        """jq was an undeclared dependency: a machine without it produced a
+        gate that silently no-opped, which is the failure class AGT-04 fixes."""
+        for name, script in self.gate_scripts().items():
+            with self.subTest(script=name):
+                with open(script, encoding="utf-8") as fh:
+                    self.assertNotIn("jq", fh.read())
 
     # --- render_hook_script() -------------------------------------------
     def test_render_hook_script_embeds_invocation(self):

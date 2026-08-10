@@ -296,9 +296,21 @@ broken. A **Stop hook** blocks the agent from ending its turn until `reflock che
 is clean — and feeds the failure back so the agent fixes it before finishing. Run
 `reflock setup claude` to install and repair it (idempotent - safe to re-run after
 moving or reinstalling reflock), or see [`examples/hooks/`](../examples/hooks/) for
-the raw files if you'd rather wire it by hand. The key subtlety is the loop-guard:
-honour the runner's "already retrying" flag so a genuinely unfixable state can't
-wedge the agent.
+the raw files if you'd rather wire it by hand.
+
+Two subtleties, both about not wedging the agent:
+
+- **The loop-guard.** Honour the runner's "already retrying" flag so a genuinely
+  unfixable state can't trap the agent in a block loop.
+- **The gate branches on the exit code, and only blocks on 1.** Exit 2 means
+  reflock could not run at all, so it evaluated nothing and has no evidence the
+  references are broken. Blocking there would hand the agent a configuration
+  error dressed up as a documentation problem, and it would edit docs trying to
+  fix something it cannot reach. Instead the gate **fails open** and prints
+  `reflock gate: skipped, ... exited 2` to stderr, so a broken gate is visible
+  rather than silent. A missing or unrunnable `reflock` is treated the same way.
+
+The hook needs `python3` (which reflock already requires) and nothing else.
 
 ## Why the two-layer split matters
 
