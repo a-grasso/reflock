@@ -3105,6 +3105,7 @@ class BenchHarnessTest(unittest.TestCase):
     def test_every_documented_key_is_accepted(self):
         """Guards against a validation set that drifts from the documented one."""
         for key in ("write", "cmd", "args", "expect_exit", "expect_json",
+                    "expect_json_subset", "expect_json_absent",
                     "expect_contains", "expect_not_contains", "expect_file_regex",
                     "expect_stderr", "expect_stderr_not_contains",
                     "expect_stderr_empty", "expect_stdout_empty",
@@ -3178,6 +3179,32 @@ class BenchHarnessTest(unittest.TestCase):
             {"cmd": "check", "args": ["--format", "json"],
              "expect_json_subset": {"findings": [{"verdict": "DANGLING", "file": "a.md"}],
                                     "summary": {"DANGLING": 1}}}))
+
+    def test_expect_json_absent_passes_on_a_key_that_is_not_there(self):
+        self.write("a.md", "See [x](missing.md)\n")
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "args": ["--format", "json"],
+             "expect_json_absent": ["findings[0].pinned", "error"]}))
+
+    def test_expect_json_absent_fails_on_a_key_that_is_there(self):
+        """The assertion has to be able to fail, or a fixture claiming a field is
+        omitted would pass whether or not it was."""
+        self.write("a.md", "See [x](missing.md)\n")
+        for path in ("findings[0].verdict", "summary", "findings"):
+            with self.subTest(path=path):
+                fails = self.run_steps(
+                    {"cmd": "check", "args": ["--format", "json"],
+                     "expect_json_absent": [path]})
+                self.assertTrue(fails)
+
+    def test_expect_json_absent_counts_a_short_array_as_absent(self):
+        """An index past the end is not there, which is the honest reading: a
+        fixture asserting findings[3].pinned is absent from a one-finding report
+        is making a true statement, not a vacuous one about a missing key."""
+        self.write("a.md", "See [x](missing.md)\n")
+        self.assertEqual([], self.run_steps(
+            {"cmd": "check", "args": ["--format", "json"],
+             "expect_json_absent": ["findings[3].verdict"]}))
 
     def test_expect_stderr_not_contains(self):
         self.write("a.md", "See [x](missing.md)\n")

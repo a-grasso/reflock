@@ -65,6 +65,15 @@ any commands run. `scenario.json`:
     (e.g. to provoke `DRIFTED`) without a separate fixture per state.
   - `expect_exit`: required process exit code.
   - `expect_json`: exact structural match against parsed `--json` stdout.
+  - `expect_json_subset`: parsed stdout must *contain* the given structure -
+    every named key matches, unnamed keys are the fixture's business. Lists and
+    scalars still match exactly, so a fixture asserting one finding cannot pass
+    with five. For the envelope, whose `root` (a temp path) and `reflock` (a
+    version) differ every run while its other keys are worth pinning exactly.
+  - `expect_json_absent`: a list of dotted paths (`findings[0].pinned`) that must
+    **not** exist in parsed stdout. `expect_json_subset` can only say what is
+    there, and absence is a contract of its own: AGT-02 promises a field is
+    omitted rather than emitted as `null`.
   - `expect_contains` / `expect_not_contains`: substring checks against
     stdout — used instead of `expect_json` whenever the expected output
     embeds a content hash that isn't worth hardcoding (e.g. a `DRIFTED`
