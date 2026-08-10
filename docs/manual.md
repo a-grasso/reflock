@@ -186,6 +186,47 @@ stdout untouched and just suppresses the human summary line - it is quiet for
 humans, not less JSON. `-q --verbose` is contradictory and exits nonzero naming
 both flags.
 
+### Output contract
+
+What a script or agent may depend on, and what it may not. A promise that is
+only implied is a promise that gets broken by accident, so this is the promise.
+
+**Stable.** Changing any of these is a breaking change: it bumps `schema`, or
+the major version for the exit codes.
+
+- **The three exit codes.** `0` clean, `1` problems found, `2` could not run as
+  asked. The 1/2 split is the load-bearing part: it is what lets a caller tell
+  "the docs are wrong" from "you invoked me wrong", and treat only the first as
+  a finding.
+- **The verdict vocabulary**: `OK`, `DANGLING`, `DRIFTED`, `UNSTAMPED`,
+  `UNSUPPORTED`. A new verdict is a breaking change, because every consumer's
+  branch on the old five silently stops covering the space - which is why D4
+  refused to add one.
+- **The JSON envelope keys** - `schema`, `reflock`, `command`, `root`,
+  `findings`, `summary`, `problems`, and `error` with its `kind` - and the
+  per-finding keys, including the [`reason` vocabulary](#verdict-reasons) and
+  the fields each reason carries.
+- **`findings` being an array on every exit path**, errors included. A consumer
+  may iterate it without a type check.
+- **The GitHub Actions verdict-to-level mapping**: `DANGLING` and `DRIFTED` are
+  `::error`, `UNSTAMPED` is `::warning`, `OK` is not annotated.
+
+**Not stable.** These may change in any release, with no `schema` bump:
+
+- **Everything about `--format human`**: wording, ordering, grouping, colors,
+  the summary line, the next-step hints. Parse it and you are on your own.
+- **The `detail` string** on any finding. It is prose for people; `reason` is
+  the machine answer to the same question.
+- **The exact text of error messages**, as distinct from `error.kind`.
+- **Anything `suspects` reports.** It is an advisory heuristic, deliberately
+  outside `just gate`; pinning its output would freeze a tuning surface.
+
+**What bumps what:** adding a key, a `reason` member, or a `command` value is
+additive and leaves `schema` alone; removing or repurposing one bumps it.
+
+This section describes tested behavior, not intentions: every claim above is
+enforced by a fixture in `evalbench/fixtures/` or a test in `test_reflock.py`.
+
 `reflock completion {bash,zsh,fish}` prints a static completion script for the
 named shell to stdout - it writes nothing and installs nothing itself:
 

@@ -152,6 +152,10 @@ For an agent, `reflock setup claude` installs the Stop hook. What each gate can
 and cannot honestly promise — and why the pre-commit one is advisory by default —
 is in [Three gates, three trust boundaries](docs/manual.md#three-gates-three-trust-boundaries).
 
+Before scripting against reflock, read the
+[output contract](docs/manual.md#output-contract): which exit codes and JSON
+fields are promised to hold still, and which are prose that may be reworded.
+
 ## Why this stays quiet
 
 ```

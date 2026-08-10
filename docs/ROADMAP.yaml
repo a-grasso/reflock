@@ -36,21 +36,9 @@
 version: 1
 
 items:
-  # --- agent-owned: the agent-facing surface --------------------------------
-  # Contracts in roadmap/AGT-*.md; cross-cutting calls in roadmap/DECIDED.md
-  # (D7, D8). AGT-01 is first deliberately: it is the only breaking change in
-  # the set, and every item after it is additive because it landed.
-  - id: AGT-03
-    title: Say what is stable
-    source: roadmap/AGT-03-output-stability-contract.md
-    tier: near
-    owner: agent
-    status: ready
-    note: >
-      Docs only, and last on purpose: it documents tested behavior, so it must
-      follow the items whose fixtures back its claims. AGT-05 need not precede
-      it - a later command joining the contract is additive.
-
+  # The agent-facing surface (AGT-01..05) has shipped in full; its contracts stay
+  # in roadmap/AGT-*.md and the cross-cutting calls in roadmap/DECIDED.md (D7,
+  # D8). Nothing agent-owned is queued - the open items below are all yours.
   # --- human-owned: design decisions ----------------------------------------
   # Listed so the orchestrator can see them and skip them, not to schedule them.
   - id: NS-01
@@ -136,6 +124,7 @@ items:
 done:
   - AGT-01
   - AGT-02
+  - AGT-03
   - AGT-04
   - AGT-05
   - BUG-02
