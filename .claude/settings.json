@@ -11,5 +11,8 @@
       "Bash(python3 -m unittest *)",
       "Bash(python3 evalbench/run_bench.py *)"
     ]
+  },
+  "env": {
+    "OTEL_RESOURCE_ATTRIBUTES": "project=reflock"
   }
 }
