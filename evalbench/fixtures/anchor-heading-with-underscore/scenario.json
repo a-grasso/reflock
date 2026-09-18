@@ -1,0 +1,15 @@
+{
+  "description": "A literal underscore survives the heading slug, as it does on GitHub (issue #14); emphasis markers still do not.",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json_subset": {
+        "findings": []
+      }
+    }
+  ]
+}

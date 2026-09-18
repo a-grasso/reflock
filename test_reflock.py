@@ -196,6 +196,31 @@ class ReflockTest(unittest.TestCase):
         for heading, slug in cases.items():
             self.assertEqual(reflock.slugify(heading), slug, heading)
 
+    def test_slugify_keeps_a_literal_underscore(self):
+        # BUG-16 / issue #14: GitHub slugs the rendered text, where emphasis
+        # syntax is gone but `_` inside a word is a word character.
+        cases = {
+            "2026-08-24 MANUAL_PROCESSES was unsatisfiable":
+                "2026-08-24-manual_processes-was-unsatisfiable",
+            "snake_case_name": "snake_case_name",
+            "_italic_ heading": "italic-heading",
+            "__bold__ heading": "bold-heading",
+            "_MANUAL_PROCESSES_": "manual_processes",
+            "a _b_ c_d": "a-b-c_d",
+            "*star* and ~strike~": "star-and-strike",
+            "_draft notes": "_draft-notes",  # a run that never closes is not emphasis
+        }
+        for heading, slug in cases.items():
+            self.assertEqual(reflock.slugify(heading), slug, heading)
+
+    def test_underscore_anchor_resolves(self):
+        self.write("t.md", "# probe\n\n"
+                            "## 2026-08-24 MANUAL_PROCESSES was unsatisfiable\n\n"
+                            "## 2026-08-24 plain heading no underscore\n\n"
+                            "[with](#2026-08-24-manual_processes-was-unsatisfiable)\n"
+                            "[without](#2026-08-24-plain-heading-no-underscore)\n")
+        self.assertEqual([v for v, _ in self.verdicts("t.md")], ["OK", "OK"])
+
     def test_anchor_with_stripped_punctuation(self):
         self.write("t.md", "# H\n\n## Modules, imports & visibility\n\nbody\n")
         self.write("a.md", "See [x](t.md#modules-imports--visibility).\n")

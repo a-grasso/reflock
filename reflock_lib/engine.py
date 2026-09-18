@@ -168,7 +168,14 @@ def slugify(text: str) -> str:
     for i, p in enumerate(parts):
         parts[i] = p[1:-1] if i % 2 else re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", p)
     s = "".join(parts)
-    s = re.sub(r"[*_~]", "", s)                     # emphasis markers
+    # Emphasis syntax is consumed by the renderer before GitHub slugs the text,
+    # but a literal `_` is a word character and survives it (BUG-16). Unwrap a
+    # run of one or two that opens at a non-word boundary, closes at one, and
+    # wraps non-space content - CommonMark's flanking rules, as much of them as
+    # a regex carries - and leave every other `_` alone. `*` and `~` need no
+    # clause: neither is a word character, so the `[^\w\- ]` pass below removes
+    # them whether they are emphasis or literal, which is what GitHub produces.
+    s = re.sub(r"(?<!\w)(_{1,2})(?=\S)(.+?)(?<=\S)\1(?!\w)", r"\2", s)
     s = s.strip().lower()
     s = re.sub(r"[^\w\- ]", "", s, flags=re.UNICODE)
     s = s.replace(" ", "-")  # per-space, no collapse - GitHub keeps consecutive hyphens
