@@ -329,7 +329,7 @@ reflock ships a `.pre-commit-hooks.yaml`, so you don't hand-roll either script:
 ```yaml
 repos:
   - repo: https://github.com/a-grasso/reflock
-    rev: v0.4.0
+    rev: v0.4.1
     hooks:
       - id: reflock-check
       - id: reflock-stamp-check
