@@ -23,8 +23,17 @@ PIN_BODY = r"(?:[0-9]+:)?[0-9a-f]*"
 
 # A markdown link, with an optional trailing pin comment. The pin's hex is its
 # own group so `stamp` can splice it in place (empty group == opted-in, unstamped).
+#
+# The link text admits one level of balanced brackets, as CommonMark does, so
+# the "back to index" footer form `[[Back to README]](../README.md)` is the
+# markdown link it renders as (BUG-15). A nested group followed by `(` is
+# excluded, because then *it* is the label of an inline link and the inner link
+# is the reference: `[![alt](i.png)](t.md)` keeps reporting the image target,
+# unchanged. The rule both here and in WIKI_LINK is the same one - a `]`
+# followed directly by `(` belongs to the innermost link.
 MD_REF = re.compile(
-    r"\[[^\]]*\]\((?P<target>[^)\s]+)(?:\s+\"[^\"]*\")?\)"
+    r"\[(?:[^\[\]]|\[[^\[\]]*\](?!\())*\]"
+    r"\((?P<target>[^)\s]+)(?:\s+\"[^\"]*\")?\)"
     r"(?:[\s.,;:!?]*<!--@(?P<pin>%s)-->)?" % PIN_BODY
 )
 # A REF comment: a comment opener, then `REF: target`, optional ` @hex`.
@@ -42,8 +51,17 @@ REF_DEF = re.compile(
 )
 # A wiki-link: [[target]], [[target#anchor]], [[target|alias]], or both.
 # Alias is display text and split off at the first `|` only.
+#
+# The `(?!\()` (BUG-15): `[[text]](target)` is a markdown link whose *text* is
+# bracketed - the "back to index" footer form - and CommonMark and GitHub both
+# render it that way, so the reference is `target` and `text` is display text.
+# MD_REF owns the whole construct; without the lookahead this pattern matched it
+# too and reported the display text as a missing file. The `(` must follow the
+# `]]` with nothing between, which is exactly when MD_REF claims the
+# construct - a merely adjacent parenthetical (`[[note]] (see also)`) is still a
+# wiki-link, since MD_REF does not match there either.
 WIKI_LINK = re.compile(
-    r"\[\[(?P<target>[^\]|]+?)(?:\|[^\]]*)?\]\]"
+    r"\[\[(?P<target>[^\]|]+?)(?:\|[^\]]*)?\]\](?!\()"
     r"(?:[\s.,;:!?]*<!--@(?P<pin>%s)-->)?" % PIN_BODY
 )
 ANCHOR_OPEN = re.compile(r"reflock-anchor:\s*(?P<name>[\w.\-/]+)")

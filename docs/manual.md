@@ -473,6 +473,11 @@ touching nothing else.
   to the current working directory**, not `--root` - same convention as `git`,
   `find`, etc. Run from the repo root (or pass absolute paths) if you're
   scripting against a `--root` that differs from your CWD.
+- **A nested link reports the innermost target.** Link text may contain
+  brackets - `[[Back to README]](../README.md)` is a link labelled
+  `[Back to README]`, and that is the reference reflock checks. Where the
+  nested brackets are themselves a link (`[![alt](badge.svg)](report.html)`),
+  the inner one wins and the outer target goes unchecked.
 - **Fenced code blocks and inline code spans aren't parsed for references.**
   A markdown renderer treats their content as literal text, so a link or
   `REF:` comment written there to illustrate the grammar - like the examples

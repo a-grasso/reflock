@@ -458,6 +458,55 @@ class ReflockTest(unittest.TestCase):
         self.write("sub/b.md", "[loader](loader.md)\n")
         self.assertEqual(self.verdict("sub/a.md"), self.verdict("sub/b.md"))
 
+    def test_bracketed_link_text_is_a_markdown_link(self):
+        # BUG-15 / issue #19: `[[text]](target)` is a markdown link whose text
+        # is bracketed, not a wiki-link to the display text.
+        self.write("README.md", "# R\n")
+        self.write("sub/a.md", "[[Back to README]](../README.md)\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "sub/a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "../README.md")
+        self.assertEqual(refs[0].kind, "md")
+        self.assertFalse(refs[0].wiki)
+        self.assertEqual(self.verdict("sub/a.md"), "OK")
+
+    def test_bracketed_link_text_with_pipe_is_a_markdown_link(self):
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "[[loader|the loader]](loader.md)\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "loader.md")
+        self.assertFalse(refs[0].wiki)
+
+    def test_image_inside_link_still_reports_the_image_target(self):
+        # The nested-bracket allowance in MD_REF must not swallow an inline
+        # link's own label: the inner image stays the reference (BUG-15).
+        self.write("i.png", "x\n")
+        self.write("a.md", "[![alt](i.png)](t.md)\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual([r.target for r in refs], ["i.png"])
+
+    def test_link_inside_link_text_still_reports_the_inner_link(self):
+        self.write("a.md", "[see [ADR-1](adr.md) first](outer.md)\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual([r.target for r in refs], ["adr.md"])
+
+    def test_wikilink_followed_by_parenthetical_stays_a_wikilink(self):
+        # Adjacency is not the link syntax: the `(` must follow `]]` directly.
+        self.write("loader.md", "# Loader\n")
+        self.write("a.md", "See [[loader]] (the loader).\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].target, "loader")
+        self.assertTrue(refs[0].wiki)
+
+    def test_bracketed_link_text_stamp_roundtrip(self):
+        self.write("t.md", "# T\n\nbody\n")
+        self.write("a.md", "[[the target]](t.md)<!--@-->\n")
+        self.stamp()
+        self.assertRegex(self.read("a.md"), r"\[\[the target\]\]\(t\.md\)<!--@[0-9a-f]{8}-->")
+        self.assertEqual(self.verdict("a.md"), "OK")
+
     def test_binary_target_treated_as_empty_unit(self):
         with open(os.path.join(self.d, "blob.bin"), "wb") as fh:
             fh.write(b"\x00\x01binary")
