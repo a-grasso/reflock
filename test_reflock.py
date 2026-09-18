@@ -196,6 +196,42 @@ class ReflockTest(unittest.TestCase):
         for heading, slug in cases.items():
             self.assertEqual(reflock.slugify(heading), slug, heading)
 
+    def test_code_ref_ssh_remote_target_is_whole(self):
+        # BUG-17 / issue #16: the pin separator and the userinfo separator are
+        # the same character; only whitespace tells them apart.
+        m = reflock.CODE_REF.search("<!-- REF: git@github.com:acme/ng-ui.git#AGENTS.md -->")
+        self.assertEqual(m.group("target"), "git@github.com:acme/ng-ui.git#AGENTS.md")
+        self.assertIsNone(m.group("pin"))
+
+    def test_ssh_remote_ref_is_external_not_dangling(self):
+        self.write("AGENTS.md", "# Fixture\n\n"
+                                "<!-- REF: git@github.com:acme/ng-ui.git#AGENTS.md -->\n")
+        self.assertEqual(self.verdict("AGENTS.md"), "OK")
+
+    def test_code_ref_pin_still_splits_after_whitespace(self):
+        self.write("t.md", "# T\n")
+        self.write("a.md", "<!-- REF: t.md @a1b2c3d4 -->\n")
+        refs = reflock.parse_refs(reflock.build_index(self.d), "a.md")
+        self.assertEqual((refs[0].target, refs[0].pin), ("t.md", "a1b2c3d4"))
+        s, e = refs[0].pin_span
+        self.assertEqual(reflock.build_index(self.d).lines["a.md"][0][s:e], "a1b2c3d4")
+
+    def test_mask_urls_blanks_an_ssh_remote(self):
+        line = "see git@github.com:acme/ng-ui.git for the source"
+        masked = reflock.mask_urls(line)
+        self.assertEqual(len(masked), len(line))
+        self.assertNotIn("ng-ui", masked)
+        self.assertIn("for the source", masked)
+
+    def test_suspects_ignores_an_ssh_remote(self):
+        self.write("AGENTS.md", "# F\n\nlives at git@github.com:acme/ng-ui.git and is used here.\n")
+        self.assertEqual(self.suspects_hits(), [])
+
+    def test_suspects_still_catches_a_path_beside_an_ssh_remote(self):
+        # Masking must not silence the rest of the line - the BUG-02 lesson.
+        self.write("AGENTS.md", "# F\n\nfrom git@github.com:acme/ng-ui.git, see docs/gone.md.\n")
+        self.assertEqual(self.suspects_hits(), ["docs/gone.md"])
+
     def test_slugify_keeps_a_literal_underscore(self):
         # BUG-16 / issue #14: GitHub slugs the rendered text, where emphasis
         # syntax is gone but `_` inside a word is a word character.

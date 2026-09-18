@@ -21,6 +21,16 @@ FP_VERSION = 1
 # prefix, then hex. Empty still means opted-in-but-unstamped.
 PIN_BODY = r"(?:[0-9]+:)?[0-9a-f]*"
 
+# An SSH remote - `git@github.com:acme/ng-ui.git` - named once, consulted by
+# every rule that needs it (BUG-17). It is the one reference-shaped construct
+# with no scheme: the `@` lands before the colon, so EXTERNAL's `scheme:` rule
+# and URL's `//` rule both miss it, while CODE_REF used to split its target at
+# that same `@`. The host must be dotted with an alphabetic TLD - the caution
+# URL's protocol-relative branch already takes - so an `a@b:c` in prose is not
+# swallowed. A host with no dot (`git@internal:path`) is the bounded gap;
+# a shape loose enough to catch it would eat ordinary text.
+SSH_REMOTE = r"[\w.\-]+@[\w\-]+(?:\.[\w\-]+)*\.[A-Za-z]{2,}:"
+
 # A markdown link, with an optional trailing pin comment. The pin's hex is its
 # own group so `stamp` can splice it in place (empty group == opted-in, unstamped).
 #
@@ -38,8 +48,15 @@ MD_REF = re.compile(
 )
 # A REF comment: a comment opener, then `REF: target`, optional ` @hex`.
 # The opener requirement keeps `REF:` inside prose or string literals from matching.
+#
+# The target is a whole non-space run: only whitespace introduces a pin, so the
+# `@` in `git@github.com:...` stays in the target where it belongs (BUG-17).
+# Spelling it `[^\s@]+` split the pin off without a lookahead, and split an SSH
+# remote after `git`. The trailing `(?=\s|$)` is what lets the lazy run stop at
+# the pin instead of eating it.
 CODE_REF = re.compile(
-    r"(?:#|//|/\*|<!--|--|;|\*)\s*REF:\s*(?P<target>[^\s@]+)(?:\s+@(?P<pin>%s))?" % PIN_BODY
+    r"(?:#|//|/\*|<!--|--|;|\*)\s*REF:\s*(?P<target>\S+?)"
+    r"(?:\s+@(?P<pin>%s))?(?=\s|$)" % PIN_BODY
 )
 # A reference-style link *definition* - `[id]: target "title"`. The pin lives
 # here, on the definition line, since a definition names its target exactly
@@ -97,7 +114,8 @@ HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.+?)\s*#*\s*$")
 PATHISH = re.compile(
     r"(?<![\w./$-])(?P<p>(?:\.\.?/)?(?:(?!\.\.\./)[\w.\-]+/)+[\w.\-]+\.[A-Za-z][A-Za-z0-9]{0,9})(?!\w)"
 )
-EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|//|#)")  # url scheme, //, or same-page #
+# url scheme, //, same-page #, or an SSH remote
+EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|//|#|%s)" % SSH_REMOTE)
 # A URL, for masking before the `suspects` scan: a URL's path segments are not
 # repo paths. PATHISH only ever excluded them by accident of its lookbehind -
 # inside `https://host/a/b.html` every candidate start is preceded by `/` or
@@ -110,6 +128,7 @@ EXTERNAL = re.compile(r"^(?:[a-z][a-z0-9+.\-]*:|//|#)")  # url scheme, //, or sa
 URL = re.compile(
     r"[a-zA-Z][a-zA-Z0-9+.\-]*://\S+"
     r"|//[\w\-]+(?:\.[\w\-]+)*\.[A-Za-z]{2,}/\S*"
+    r"|%s\S*" % SSH_REMOTE
 )
 PIN_STRIP = re.compile(
     r"<!--@(?:[0-9]+:)?[0-9a-f]*-->|(?<=@)(?:[0-9]+:)?[0-9a-f]{%d}\b" % FP_LEN)

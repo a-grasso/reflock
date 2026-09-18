@@ -1,0 +1,25 @@
+{
+  "description": "An SSH remote is external, not a repo path: `check` does not report a missing file called `git` (issue #16) and `suspects` does not report the remote's path half (issue #17).",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json_subset": {
+        "findings": []
+      }
+    },
+    {
+      "cmd": "suspects",
+      "args": [
+        "--json"
+      ],
+      "expect_exit": 0,
+      "expect_json_subset": {
+        "findings": []
+      }
+    }
+  ]
+}
