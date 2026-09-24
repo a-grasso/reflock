@@ -1,0 +1,20 @@
+{
+  "description": "Links under a See also heading and index-table rows make no claim: suggest drops them before the model is needed and exits 0 (SUG-01).",
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "suggest",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": [
+        "nothing to suggest: 2 unpinned reference(s)"
+      ],
+      "expect_stderr_empty": true,
+      "expect_tree_unchanged_since_step": 0
+    }
+  ]
+}

@@ -235,36 +235,48 @@ def build_index(root: str) -> Index:
         if not is_text(ap):
             continue
         with open(ap, encoding="utf-8", errors="replace") as fh:
-            lines = fh.read().splitlines()
-        idx.lines[rel] = lines
-        if rel.endswith((".md", ".markdown")):
-            hs, seen = [], {}
-            in_fence = False
-            for i, ln in enumerate(lines):
-                if ln.lstrip().startswith("```"):
-                    in_fence = not in_fence
-                    continue
-                if in_fence:
-                    continue
-                m = HEADING.match(ln)
-                if m:
-                    slug = slugify(m.group("text"))
-                    n = seen.get(slug, 0)
-                    seen[slug] = n + 1
-                    hs.append((slug if n == 0 else f"{slug}-{n}", i, len(m.group("hashes"))))
-            idx.headings[rel] = hs
-        # explicit anchor spans (any file type)
-        spans, open_at = {}, {}
-        for i, ln in enumerate(lines):
-            mo = ANCHOR_OPEN.search(ln)
-            if mo:
-                open_at[mo.group("name")] = i
-            me = ANCHOR_END.search(ln)
-            if me and me.group("name") in open_at:
-                spans[me.group("name")] = (open_at.pop(me.group("name")) + 1, i)
-        if spans:
-            idx.spans[rel] = spans
+            index_text(idx, rel, fh.read())
     return idx
+
+
+def index_text(idx: Index, rel: str, text: str) -> None:
+    """Index one file's text under `rel`: its lines, heading slugs and spans.
+
+    The whole of what makes `unit_text` answer, split out of `build_index` so
+    that text which is not on disk - `reflock suggest` replays a file's history
+    revision by revision - is cut into units by this code and no copy of it. A
+    second definition of "a unit" would let the suggester measure churn on
+    sections the checker does not see.
+    """
+    lines = text.splitlines()
+    idx.lines[rel] = lines
+    if rel.endswith((".md", ".markdown")):
+        hs, seen = [], {}
+        in_fence = False
+        for i, ln in enumerate(lines):
+            if ln.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
+            m = HEADING.match(ln)
+            if m:
+                slug = slugify(m.group("text"))
+                n = seen.get(slug, 0)
+                seen[slug] = n + 1
+                hs.append((slug if n == 0 else f"{slug}-{n}", i, len(m.group("hashes"))))
+        idx.headings[rel] = hs
+    # explicit anchor spans (any file type)
+    spans, open_at = {}, {}
+    for i, ln in enumerate(lines):
+        mo = ANCHOR_OPEN.search(ln)
+        if mo:
+            open_at[mo.group("name")] = i
+        me = ANCHOR_END.search(ln)
+        if me and me.group("name") in open_at:
+            spans[me.group("name")] = (open_at.pop(me.group("name")) + 1, i)
+    if spans:
+        idx.spans[rel] = spans
 
 
 def mask_code_spans(line: str) -> str:

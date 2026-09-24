@@ -123,6 +123,14 @@ reflock backlinks doc/DESIGN.md     # what points at this file, before you edit 
 reflock suspects --all  # bare path-shaped tokens that resolve to nothing
 ```
 
+Starting from zero pins? `reflock suggest` places the first ones for you, as
+a diff you read: it picks references worth pinning by how calmly their
+target has actually changed and narrows each to the section it's about, then
+leaves the write-up to `stamp`. It's an opt-in extra (`pip install
+'reflock[suggest]'` or `brew install a-grasso/tap/reflock-suggest`) - see the
+[manual](docs/manual.md#reflock-suggest) for install options, the first-run
+model download, and exit codes.
+
 Files come from `git ls-files`, so `.gitignore` is honoured for free; a
 `.reflockignore` skips further files as *sources* while keeping them as targets.
 `stamp` is a surgical write — it changes the 8 hex characters of a pin and

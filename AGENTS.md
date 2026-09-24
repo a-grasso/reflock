@@ -51,6 +51,11 @@ Distributes as a single dependency-free Python file (stdlib only).
   stay at the root rather than moving under `docs/`.
 - `CONTRIBUTING.md`, `SECURITY.md`, `.github/` — the public-repo surface: CI, release
   automation, issue and PR templates, funding.
+- `packaging/` - `brew.py`, which generates the release's two Homebrew formulae
+  (`reflock`, `reflock-suggest`) from one script; see `.github/workflows/release.yml`.
+- `suggest-model/` - maintainer-only tools (`export.py`, `parity.py`) that turn a
+  fine-tuned laya checkpoint into the ONNX artifact `reflock suggest` downloads.
+  Needs torch and laya, neither of which a reflock user ever installs; not shipped.
 
 ## Navigation (for agents)
 - Follow **`ref:`** to enter a module. Read that module's `AGENTS.md` before editing it.

@@ -109,7 +109,30 @@ def build_parser() -> argparse.ArgumentParser:
                               "  reflock setup claude\n")
     setup.add_argument("target", choices=SETUP_TARGETS)
     setup.set_defaults(fn=cmd_setup, needs_index=False)
+    sg = sub.add_parser("suggest", help="place the first pins automatically (needs [suggest])",
+                        formatter_class=argparse.RawDescriptionHelpFormatter,
+                        epilog="examples:\n"
+                               "  reflock suggest --dry-run\n"
+                               "  reflock suggest docs/ --max-pins 10\n"
+                               "  reflock suggest && reflock stamp && git diff\n")
+    sg.add_argument("paths", nargs="*", help="limit to these files/dirs (default: all)")
+    sg.add_argument("--max-pins", type=int, default=25,
+                    help="pin at most this many references (default: 25)")
+    sg.add_argument("--since", default="90 days ago",
+                    help="history window churn is measured over (default: '90 days ago')")
+    sg.add_argument("-n", "--dry-run", action="store_true",
+                    help="print the suggestions, write nothing")
+    sg.add_argument("--model", metavar="DIR", default=None,
+                    help="use this model directory instead of the downloaded one")
+    sg.set_defaults(fn=cmd_suggest)
     return ap
+
+
+def cmd_suggest(idx, args) -> int:
+    # Imported on use: `suggest` is the one command with an optional
+    # dependency, and every other command must start without touching it.
+    from reflock_lib.suggest import cmd_suggest as run
+    return run(idx, args)
 
 
 def parser_spec() -> dict[str, dict]:
