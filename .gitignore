@@ -8,3 +8,5 @@ __pycache__/
 
 docs/drafts
 .night
+build/
+*.egg-info/

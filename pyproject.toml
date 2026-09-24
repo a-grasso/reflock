@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reflock"
+dynamic = ["version"]
+description = "A lockfile for cross-references"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+# Deliberately empty: reflock itself is standard library only (ADR-0001,
+# DECISIONS.md). The one optional dependency is behind the extra below.
+dependencies = []
+
+[project.optional-dependencies]
+# `reflock suggest` runs its model on ONNX Runtime (numpy comes with it).
+# Nothing else imports it; see reflock_lib/suggest/runtime.py.
+suggest = ["onnxruntime>=1.17"]
+
+[project.urls]
+Homepage = "https://github.com/a-grasso/reflock"
+
+[project.scripts]
+reflock = "reflock_lib.cli:main"
+
+[tool.setuptools]
+py-modules = ["reflock"]
+packages = ["reflock_lib", "reflock_lib.suggest"]
+
+[tool.setuptools.dynamic]
+version = { attr = "reflock_lib.__version__" }
