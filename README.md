@@ -150,7 +150,7 @@ With the [pre-commit](https://pre-commit.com) framework:
 ```yaml
 repos:
   - repo: https://github.com/a-grasso/reflock
-    rev: v0.4.2
+    rev: v0.5.0
     hooks:
       - id: reflock-check
       - id: reflock-stamp-check
