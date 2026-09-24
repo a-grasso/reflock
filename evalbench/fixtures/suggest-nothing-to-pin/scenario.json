@@ -1,0 +1,20 @@
+{
+  "description": "suggest with every reference already pinned or narrowed exits 0 without the [suggest] runtime and writes nothing (SUG-03).",
+  "steps": [
+    {
+      "cmd": "stamp",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "suggest",
+      "args": [],
+      "expect_exit": 0,
+      "expect_contains": [
+        "nothing to suggest"
+      ],
+      "expect_stderr_empty": true,
+      "expect_tree_unchanged_since_step": 0
+    }
+  ]
+}

@@ -21,6 +21,8 @@ reflock stamp --check --format json   # ... the same report, machine-readable
 reflock suspects --all # bare path-shaped tokens that resolve to nothing
 reflock backlinks doc/DESIGN.md   # what points at this file, before you edit it
 reflock explain doc/DESIGN.md:42  # everything about one reference
+reflock suggest         # place the first pins automatically (needs [suggest])
+reflock suggest --dry-run docs/ --max-pins 10   # preview, scoped, capped
 ```
 
 ### Re-blessing requires --reviewed
@@ -100,6 +102,49 @@ removing or repurposing one bumps it.
 The same envelope covers `explain`, `backlinks` and `suspects --json`, with
 `command` naming which one produced it and `findings` carrying that command's
 rows.
+
+### reflock suggest
+
+`reflock suggest` is an opt-in onboarding pass: it places the first pins in a
+repository that has none, as a diff you read, not a new gate. Pins work, but
+placed by hand the first ones go on whatever the author happens to be looking
+at; `suggest` picks them instead by combining two signals - how often a
+target actually changed in first-parent git history (calmest first, so the
+first pins are the ones least likely to cry wolf) and a local model that
+narrows each reference to the heading its sentence is about, or leaves it
+whole-file when it's about the document as a whole.
+
+Install the runtime it needs with either:
+
+```sh
+pip install 'reflock[suggest]'
+brew install a-grasso/tap/reflock-suggest
+```
+
+The model itself (a few hundred megabytes) is not part of either install: on
+first run, `suggest` downloads it as a GitHub release asset, sha256-verifies
+every file against a manifest, and caches it under
+`$XDG_CACHE_HOME/reflock/models` (or `~/.cache/reflock/models` if that
+variable is unset) so later runs skip the download entirely. Pass `--model
+DIR` to use a local model directory instead.
+
+`suggest` never writes references that were already pinned or already
+narrowed by hand - only whole-file, unpinned markdown links are candidates,
+and links under a "See also"/index-style heading are filtered out before the
+model is ever touched. `--max-pins` (default 25) caps how many it writes in
+one run; `--since` (default `'90 days ago'`) bounds the git history window
+churn is measured over; `-n`/`--dry-run` prints what it would pin without
+writing anything.
+
+Exit codes: `0` both when it wrote pins (or would have, under `--dry-run`)
+and when there was nothing to suggest; `2` when it can't proceed at all - not
+a git work tree, a scope error, the `[suggest]` runtime isn't installed, or
+the model couldn't be fetched or verified. There is no exit 1; `suggest`
+doesn't report pass/fail the way `check` does.
+
+Its output is a suggestion, not a fact: read it with `git diff` before
+running `reflock stamp && reflock check` to fill in the fingerprints and
+confirm the tree is clean.
 
 ### Verdict reasons
 

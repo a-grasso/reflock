@@ -1,0 +1,22 @@
+{
+  "description": "suggest ranks by git history, so outside a work tree it refuses with exit 2 rather than guessing an order (SUG-03).",
+  "git": {
+    "skip": true
+  },
+  "steps": [
+    {
+      "cmd": "check",
+      "args": [],
+      "expect_exit": 0
+    },
+    {
+      "cmd": "suggest",
+      "args": [],
+      "expect_exit": 2,
+      "expect_stderr": [
+        "not a git work tree"
+      ],
+      "expect_tree_unchanged_since_step": 0
+    }
+  ]
+}

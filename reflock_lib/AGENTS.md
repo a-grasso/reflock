@@ -31,6 +31,10 @@ package.
 - `commands.py` — subcommand implementations (`check`, `stamp`, `suspects`, `explain`,
   `backlinks`) and output renderers (human, JSON, GitHub annotations).
 - `cli.py` — argument parsing, shell completion generation, main entry point.
+- `suggest/` - `reflock suggest`: harvests unpinned references, filters out
+  navigation, narrows each to a section with a local model, ranks by git
+  churn, and writes the pins `stamp` fills. Opt-in extra; see its own
+  constraint below.
 
 ## Navigation (for agents)
 - Follow **`up:`** for project-wide conventions, `just` recipes, and the full module map.

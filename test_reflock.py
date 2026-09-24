@@ -3556,6 +3556,7 @@ class PinVersionTest(unittest.TestCase):
                          reflock_engine.normalize("# REF: t.md @a1b2c3d4"))
 
 
+
 class SuggestTest(unittest.TestCase):
     """`reflock suggest` (SUG-01..03). The model is never loaded here: every
     stage but the anchor pick is standard library, and the pick is stubbed so
@@ -3611,6 +3612,41 @@ class SuggestTest(unittest.TestCase):
                 contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             rc = reflock.main(["--root", self.d, "suggest", "--model", model, *args])
         return rc, out.getvalue(), err.getvalue()
+
+    # --- SUG-01: which links make a claim ------------------------------------
+    def test_harvest_takes_unpinned_whole_file_links_into_text(self):
+        self.write("docs/design.md", self.TARGET)
+        self.write("a.md", "\n".join([
+            "Plain [x](docs/design.md).",
+            "Pinned [x](docs/design.md)<!--@-->.",
+            "Narrowed [x](docs/design.md#storage).",
+            "A directory [x](docs/).",
+            "Missing [x](docs/gone.md).",
+        ]) + "\n")
+        got = self.cands()
+        self.assertEqual([(1, "docs/design.md", "x")],
+                         [(c["line"], c["target_path"], c["link_text"]) for c in got])
+        self.assertEqual("Plain [x](docs/design.md).", got[0]["sentence"])
+
+    def test_filter_drops_links_under_a_navigation_heading(self):
+        from reflock_lib.suggest import claims
+        self.write("docs/design.md", self.TARGET)
+        self.write("a.md", "# A\n\nWe keep [state](docs/design.md) small.\n\n"
+                           "## See also\n\n- [design](docs/design.md)\n\n"
+                           "## Related work\n\nOthers do [it](docs/design.md) too.\n")
+        idx = self.idx()
+        kept = [c["line"] for c in self.cands() if claims.pin_worthy(idx, c)]
+        # "Related work" is a prose section: only the whole heading counts.
+        self.assertEqual([3, 11], kept)
+
+    def test_filter_drops_index_rows_but_not_claims_in_a_table(self):
+        from reflock_lib.suggest import claims
+        self.write("docs/design.md", self.TARGET)
+        self.write("a.md", "| doc | why |\n|---|---|\n"
+                           "| [Design](docs/design.md) | the design |\n"
+                           "| cache | bounded by [the design](docs/design.md) |\n")
+        idx = self.idx()
+        self.assertEqual([4], [c["line"] for c in self.cands() if claims.pin_worthy(idx, c)])
 
     # --- SUG-02: the stdlib half of the model path ----------------------------
     def test_tokenizer_merges_by_rank_and_honours_special_tokens(self):
@@ -3686,6 +3722,121 @@ class SuggestTest(unittest.TestCase):
         m = {"name": "m", "url": "file:///nowhere/", "files": {"anchor.onnx": {"sha256": "", "size": 0}}}
         with self.assertRaisesRegex(fetch.FetchError, "--model"):
             fetch.ensure(m, os.path.join(self.d, "cache"))
+
+    # --- SUG-03: the command -------------------------------------------------
+    def test_churn_counts_first_parent_changes_of_the_unit(self):
+        from reflock_lib.suggest.churn import Churn
+        self.repo()
+        self.write("docs/design.md", self.TARGET.replace("HTTP only.", "HTTP and gRPC."))
+        self.commit()
+        self.write("docs/design.md", self.TARGET.replace("HTTP only.", "gRPC only."))
+        self.commit()
+        c = Churn(self.d)
+        # Being born counts: an absent unit and a present one fingerprint apart.
+        self.assertEqual((3, 3), c.of("docs/design.md", "transport"))
+        self.assertEqual((1, 3), c.of("docs/design.md", "storage"))
+        self.assertLess(c.rate("docs/design.md", "storage"), c.rate("docs/design.md", "transport"))
+
+    def test_suggest_writes_an_opt_in_pin_that_stamp_fills(self):
+        self.repo()
+        rc, out, _ = self.suggest()
+        self.assertEqual(0, rc, out)
+        self.assertEqual("We store state in [one file](docs/design.md#storage)<!--@-->.\n",
+                         self.read("a.md"))
+        self.assertIn("reflock stamp", out)
+        self.stamp()
+        rc, findings = self.check_json()
+        self.assertEqual((0, []), (rc, findings))
+        self.assertRegex(self.read("a.md"), r"#storage\)<!--@[0-9a-f]{8}-->\.")
+
+    def test_suggest_dry_run_writes_nothing(self):
+        self.repo()
+        rc, out, _ = self.suggest("--dry-run")
+        self.assertEqual(0, rc)
+        self.assertIn("docs/design.md#storage", out)
+        self.assertEqual("We store state in [one file](docs/design.md).\n", self.read("a.md"))
+
+    def test_suggest_keeps_line_endings_and_code_spans(self):
+        self.git("init", "-q")
+        self.write("docs/design.md", self.TARGET)
+        with open(os.path.join(self.d, "a.md"), "w", newline="") as fh:
+            fh.write("`[no](docs/design.md)` but [yes](docs/design.md)\r\nend\r\n")
+        self.commit()
+        self.assertEqual(0, self.suggest(pick=None)[0])
+        with open(os.path.join(self.d, "a.md"), newline="") as fh:
+            self.assertEqual("`[no](docs/design.md)` but [yes](docs/design.md)<!--@-->\r\nend\r\n",
+                             fh.read())
+
+    def test_suggest_ranks_calm_units_first_and_caps(self):
+        self.repo()
+        self.write("b.md", "Transport is [plain](docs/design.md).\n")
+        self.commit()
+        for text in ("HTTP and gRPC.", "gRPC only."):
+            self.write("docs/design.md", self.TARGET.replace("HTTP only.", text))
+            self.commit()
+        from reflock_lib.suggest import anchor
+
+        class ByFile:
+            def __init__(self, model_dir):
+                pass
+
+            def anchor(self, idx, ref):
+                return ("storage" if ref["file"] == "a.md" else "transport"), 0.5
+
+        model = os.path.join(self.d, ".model")
+        os.makedirs(model)
+        open(os.path.join(model, "anchor.onnx"), "w").close()
+        from reflock_lib.suggest import runtime
+        with mock.patch.object(runtime, "require", lambda: None), \
+                mock.patch.object(anchor, "Anchorer", ByFile), \
+                contextlib.redirect_stdout(io.StringIO()):
+            rc = reflock.main(["--root", self.d, "suggest", "--model", model, "--max-pins", "1"])
+        self.assertEqual(0, rc)
+        self.assertIn("<!--@-->", self.read("a.md"))
+        self.assertNotIn("<!--@-->", self.read("b.md"))
+
+    def test_suggest_outside_git_exits_2(self):
+        self.write("docs/design.md", self.TARGET)
+        self.write("a.md", "We store state in [one file](docs/design.md).\n")
+        rc, _, err = self.suggest()
+        self.assertEqual(2, rc)
+        self.assertIn("git", err)
+
+    def test_suggest_with_nothing_to_pin_needs_no_runtime(self):
+        self.git("init", "-q")
+        self.write("a.md", "No links here.\n")
+        self.commit()
+        out = io.StringIO()
+        from reflock_lib.suggest import runtime
+
+        def boom():
+            raise AssertionError("runtime touched with nothing to do")
+        with mock.patch.object(runtime, "require", boom), contextlib.redirect_stdout(out):
+            rc = reflock.main(["--root", self.d, "suggest"])
+        self.assertEqual(0, rc)
+        self.assertIn("nothing to suggest", out.getvalue())
+
+    def test_suggest_without_the_extra_prints_the_install_hint(self):
+        self.repo()
+        err = io.StringIO()
+        from reflock_lib.suggest import runtime
+
+        def missing():
+            raise runtime.MissingRuntime(runtime.INSTALL_HINT)
+        with mock.patch.object(runtime, "require", missing), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "suggest"])
+        self.assertEqual(2, rc)
+        self.assertIn("pip install 'reflock[suggest]'", err.getvalue())
+        self.assertIn("brew install a-grasso/tap/reflock-suggest", err.getvalue())
+
+    def test_other_commands_never_import_the_suggester(self):
+        code = ("import sys, reflock; reflock.main(['--root', %r, 'check']); "
+                "print(any(m.startswith('reflock_lib.suggest') for m in sys.modules))" % self.d)
+        self.write("a.md", "x\n")
+        p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                           cwd=os.path.dirname(os.path.abspath(__file__)))
+        self.assertEqual("False", p.stdout.strip().splitlines()[-1], p.stderr)
 
 
 if __name__ == "__main__":
