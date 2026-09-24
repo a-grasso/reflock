@@ -3556,5 +3556,137 @@ class PinVersionTest(unittest.TestCase):
                          reflock_engine.normalize("# REF: t.md @a1b2c3d4"))
 
 
+class SuggestTest(unittest.TestCase):
+    """`reflock suggest` (SUG-01..03). The model is never loaded here: every
+    stage but the anchor pick is standard library, and the pick is stubbed so
+    the pipeline around it - harvest, filter, rank, write - is what is tested.
+    Model parity is suggest-model/parity.py's job, against the real weights."""
+
+    setUp, tearDown = ReflockTest.setUp, ReflockTest.tearDown
+    write, read, stamp = ReflockTest.write, ReflockTest.read, ReflockTest.stamp
+    check_json, findings = ReflockTest.check_json, ReflockTest.findings
+
+    TARGET = ("# Design\n\nintro\n\n## Storage\n\nSQLite, one file.\n\n"
+              "## Transport\n\nHTTP only.\n")
+
+    def git(self, *args):
+        return subprocess.run(["git", "-C", self.d, "-c", "user.email=t@t", "-c", "user.name=t",
+                               *args], capture_output=True, text=True, check=True).stdout
+
+    def commit(self, msg="c"):
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", msg)
+
+    def repo(self):
+        self.git("init", "-q")
+        self.write("docs/design.md", self.TARGET)
+        self.write("a.md", "We store state in [one file](docs/design.md).\n")
+        self.commit()
+
+    def idx(self):
+        return reflock.build_index(self.d)
+
+    def cands(self):
+        from reflock_lib.suggest import harvest
+        idx = self.idx()
+        return harvest.candidates(idx, reflock_commands.scoped_files(idx, []))
+
+    def suggest(self, *args, pick="storage"):
+        """Run the command with the anchor pick stubbed; (exit, stdout, stderr)."""
+        from reflock_lib.suggest import anchor, runtime
+
+        class Fake:
+            def __init__(self, model_dir):
+                pass
+
+            def anchor(self, idx, ref):
+                return pick, 0.9
+
+        model = os.path.join(self.d, ".model")
+        os.makedirs(model, exist_ok=True)
+        open(os.path.join(model, "anchor.onnx"), "w").close()
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(runtime, "require", lambda: None), \
+                mock.patch.object(anchor, "Anchorer", Fake), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = reflock.main(["--root", self.d, "suggest", "--model", model, *args])
+        return rc, out.getvalue(), err.getvalue()
+
+    # --- SUG-02: the stdlib half of the model path ----------------------------
+    def test_tokenizer_merges_by_rank_and_honours_special_tokens(self):
+        from reflock_lib.suggest import bpe
+        byte = bpe._bytes_to_unicode()
+        vocab = {c: i for i, c in enumerate(byte[b] for b in range(256))}
+        merges = ["h e", "l l", "he ll", "hell o", "Ġ w"]
+        for m in merges:
+            vocab.setdefault(m.replace(" ", ""), len(vocab))
+        self.write("tok.json", json.dumps({
+            "model": {"type": "BPE", "vocab": vocab, "merges": merges},
+            "added_tokens": [{"id": 900, "content": "[MASK]", "normalized": False,
+                              "lstrip": True}]}))
+        tok = bpe.Tokenizer(os.path.join(self.d, "tok.json"))
+        v = vocab
+        self.assertEqual([v["hello"], v["Ġw"], v["o"], v["r"], v["l"], v["d"]],
+                         tok.encode("hello world"))
+        # lstrip: the space before [MASK] belongs to it, not to the text.
+        self.assertEqual([v["hello"], 900], tok.encode("hello [MASK]"))
+
+    def test_whole_file_pick_is_left_unanchored(self):
+        from reflock_lib.suggest import anchor
+        self.write("t.md", "# Title\n\n## A\n\nx\n")
+        self.write("u.md", "## Only\n\n### Sub\n\nx\n\n## Other\n\ny\n")
+        idx = self.idx()
+        self.assertTrue(anchor.spans_whole_file(idx, "t.md", "title"))
+        self.assertFalse(anchor.spans_whole_file(idx, "t.md", "a"))
+        self.assertFalse(anchor.spans_whole_file(idx, "u.md", "only"))
+        self.assertEqual(["title", "a"], list(anchor.options_for(idx, "t.md")))
+
+    def test_confidence_is_one_minus_normalised_entropy(self):
+        from reflock_lib.suggest import anchor
+        self.assertAlmostEqual(0.0, anchor.confidence([0.25] * 4))
+        self.assertAlmostEqual(1.0, anchor.confidence([1.0, 0.0, 0.0]))
+        self.assertEqual("choice:2", anchor._bucket(2))
+        self.assertEqual("choice:11+", anchor._bucket(12))
+
+    def manifest(self, files):
+        import hashlib
+        src = os.path.join(self.d, "release")
+        os.makedirs(src, exist_ok=True)
+        meta = {}
+        for name, data in files.items():
+            with open(os.path.join(src, name), "wb") as fh:
+                fh.write(data)
+            meta[name] = {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+        return {"name": "m", "url": "file://" + src + "/", "files": meta}
+
+    def test_fetch_verifies_then_caches(self):
+        from reflock_lib.suggest import fetch
+        m = self.manifest({"anchor.onnx": b"weights", "config.json": b"{}"})
+        calls = []
+        cache = os.path.join(self.d, "cache")
+        path = fetch.ensure(m, cache, progress=lambda *a: calls.append(a))
+        with open(os.path.join(path, "anchor.onnx"), "rb") as fh:
+            self.assertEqual(b"weights", fh.read())
+        self.assertTrue(calls)
+        calls.clear()
+        self.assertEqual(path, fetch.ensure(m, cache, progress=lambda *a: calls.append(a)))
+        self.assertEqual([], calls)             # verified once, not re-downloaded
+
+    def test_fetch_refuses_a_file_that_does_not_verify(self):
+        from reflock_lib.suggest import fetch
+        m = self.manifest({"anchor.onnx": b"weights"})
+        m["files"]["anchor.onnx"]["sha256"] = "0" * 64
+        cache = os.path.join(self.d, "cache")
+        with self.assertRaisesRegex(fetch.FetchError, "did not verify"):
+            fetch.ensure(m, cache, progress=lambda *a: None)
+        self.assertEqual([], os.listdir(os.path.join(cache, "m")))
+
+    def test_fetch_without_a_published_model_says_so(self):
+        from reflock_lib.suggest import fetch
+        m = {"name": "m", "url": "file:///nowhere/", "files": {"anchor.onnx": {"sha256": "", "size": 0}}}
+        with self.assertRaisesRegex(fetch.FetchError, "--model"):
+            fetch.ensure(m, os.path.join(self.d, "cache"))
+
+
 if __name__ == "__main__":
     unittest.main()

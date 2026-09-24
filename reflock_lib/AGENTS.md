@@ -41,4 +41,8 @@ package.
   `AGENTS.md` and `DECISIONS.md`).
 - Tests patch `reflock` module functions via `mock.patch.object`; moving a function
   across these files requires updating the corresponding patch sites in `test_reflock.py`.
+- `reflock_lib/suggest/runtime.py` is the only module allowed a third-party
+  import (`numpy`, `onnxruntime`, behind the `[suggest]` extra), and it is
+  only reachable from `reflock suggest` - every other command must start
+  without importing `reflock_lib.suggest` at all.
 </content>
