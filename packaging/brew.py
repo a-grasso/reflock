@@ -7,8 +7,13 @@
 plus the runtime `reflock suggest` needs - ONNX Runtime and numpy in a
 private virtualenv - so a user opts into a few hundred megabytes by naming the
 formula, and `brew install reflock` stays what it always was. The two install
-the same `reflock` command and conflict, rather than one depending on the
-other: a formula cannot add packages to another formula's interpreter.
+the same `reflock` command, rather than one depending on the other: a formula
+cannot add packages to another formula's interpreter. They declare no
+`conflicts_with`, because Homebrew trusts a third-party tap one formula at a
+time: `brew install a-grasso/tap/reflock-suggest` trusts that formula only,
+and a `conflicts_with "reflock"` then refuses to load the other, untrusted
+one, so the install dies. Installing both still fails, at `brew link`, whose
+error names the file both want.
 
 Homebrew's own `onnxruntime` is the C library with no Python bindings, and
 ONNX Runtime publishes no source distribution, so the runtime is installed from
@@ -123,8 +128,6 @@ def reflock_suggest(url: str, sha256: str, wheels: dict[str, tuple[str, str, int
   depends_on arch: :%s
   depends_on macos: :%s
   depends_on "python@%s"
-
-  conflicts_with "reflock", because: "both install the `reflock` command"
 %s
   def install
 %s

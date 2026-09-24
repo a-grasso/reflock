@@ -28,10 +28,14 @@ from PyPI wheels, pinned and verified like any other formula resource.
   `--no-deps` (reflock needs only the inference session; ONNX Runtime's other
   declared dependencies serve its own converter tooling, not `reflock
   suggest`). `depends_on arch: :arm64` and a `macos:` floor derived from the
-  oldest macOS the pinned wheels actually run on. `conflicts_with "reflock"`,
-  because both formulae install the same `reflock` command into `bin` and a
-  formula cannot add packages to another formula's interpreter - so a user
-  chooses one, not both.
+  oldest macOS the pinned wheels actually run on. Both formulae install the
+  same `reflock` command into `bin`, and a formula cannot add packages to
+  another formula's interpreter, so a user chooses one, not both. There is no
+  `conflicts_with "reflock"`: Homebrew trusts a third-party tap per formula,
+  so installing `reflock-suggest` trusts only that formula, and the
+  conflict declaration then refuses to load the untrusted `reflock` formula
+  and aborts the install (seen in CI). Installing both fails at `brew link`
+  instead, naming `bin/reflock`.
 
 Both formulae's `test do` blocks exercise a real `stamp`/`check` round trip,
 not just `--help`, on the theory that a formula shipping an unimportable or
@@ -59,7 +63,8 @@ exercised at release time.
 
 1. `packaging/brew.py --url ... --sha256 ... --out DIR` writes `reflock.rb`
    byte-identical to the prior heredoc, and a `reflock-suggest.rb` that
-   installs, `conflicts_with "reflock"`, and passes its `test do` block.
+   installs without loading any other formula (no `conflicts_with`), and
+   passes its `test do` block.
 2. `.github/workflows/ci.yml`'s `brew-formulae` job (macOS) installs and
    tests both formulae from the checkout.
 3. `.github/workflows/release.yml` calls `packaging/brew.py` to publish both
