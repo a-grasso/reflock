@@ -83,9 +83,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Generate formulae for this checkout
+        # Homebrew takes the version from the tarball's name and the formula
+        # test asserts `reflock --version` prints it, so name it for real.
         run: |
-          tarball="$RUNNER_TEMP/reflock-0.0.0.tar.gz"
-          git archive --format=tar.gz --prefix=reflock-0.0.0/ -o "$tarball" HEAD
+          version="$(python3 -c 'import reflock_lib; print(reflock_lib.__version__)')"
+          tarball="$RUNNER_TEMP/reflock-$version.tar.gz"
+          git archive --format=tar.gz --prefix="reflock-$version/" -o "$tarball" HEAD
           brew tap-new --no-git local/reflock
           python3 packaging/brew.py --url "file://$tarball" \
             --sha256 "$(shasum -a 256 "$tarball" | cut -d' ' -f1)" \
